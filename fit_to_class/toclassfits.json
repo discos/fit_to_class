@@ -1,0 +1,60 @@
+
+"SCAN" :"",
+"TELESCOPE","",
+"CDELT2":{
+   "value"="None"
+   },
+"CDELT3":{
+   "value"="None"
+   },
+"TSYS":{
+   "value"= 1.0
+},
+"IMAGFREQ":{
+   "value"="None"
+},
+"TAU-ATM":{
+   "value"="None"
+},
+"MH2O":{
+  "value"="None"
+},
+"TOUTSIDE":{
+   "value"="None"
+},
+"PRESSURE":{
+   "value"="None"
+},
+"TCHOP":{
+   "value"="None"
+},
+"TCOLD":{
+   "value"="None"
+},
+"ELEVATION":{
+   "value"="None"
+},
+"AZIMUTH":{
+   "value"="None"
+},
+"GAINIMAG":{
+   "value"="None"
+},
+"FORWEFF":{
+   "value"="None"
+},
+"UT":{
+   "value"="None"
+},
+"LST":{
+   "value"="None"
+},
+"OBSTIME":{
+   "value"="None"
+},
+"SPECTRUM":{
+   "value"="None"
+}
+
+
+
