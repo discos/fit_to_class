@@ -1,2 +1,6 @@
 # fit_to_class
-fitszilla_to_classfits
+
+Usage:
+    
+  fit_to_class -t [nod,on_off,map] folder
+
