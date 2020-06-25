@@ -225,63 +225,7 @@ class Fitslike_handler():
             """ Get Polarization flag """
             return p_group['pol'][0]
 
-        def _is_cal(p_subscan,p_group):
-            """
-            Genera il flag calibrazione attiva
-
-            Parameters
-            ----------
-            p_sub : astropy table group
-                group with flag_cal
-
-            p_subscan : subscan with meta data
-                group with flag_cal
-
-            Returns
-            -------
-            true calibrazione attiva
-
-            """
-            l_signal= p_subscan['scheduled']['signal']
-            if l_signal in kws['keys_cal_on']:
-                return True
-                " @todo keyword subtype ? "
-                " Controllar anche flag_cal any"
-            elif np.any(p_group['flag_cal']):
-                return True
-
-            if p_group['flag_cal'] > 0:
-                return True
-            return False
-
-        def _is_on(p_subScan):
-            """
-            Verifica se la subscan è un on o un off
-
-            Parameters
-            ----------
-            p_subscan : dict
-                subscan ch_x
-
-            Returns
-            -------
-            None.
-
-            """
-            l_signal= p_subScan['scheduled']['signal']
-            l_feed= p_subScan['frontend']['feed']
-            if l_signal in kws['keys_on']:
-                if l_feed == 0:
-                    return True
-                else:
-                    return False
-            else:
-                if l_feed == 0:
-                    return False
-                else:
-                    return True
-            if l_signal == None :
-                return p_subScan['ccordinates']['az_offset'] > 1e-4 * unit.rad
+   
 
         " ordino le subscan in base al file name "
         self.m_subscans= sorted(self.m_subscans,\
@@ -345,21 +289,33 @@ class Fitslike_handler():
                             # Astropy fits table on disk creation, this table is a temp table to work
                             # subscan data with the goal of reducing RAM usage and improve computation
                             # stability with big input data
+                            #l_onOffdict= {
+                            #    'on': [], 'off': [],'cal_on':[], 'cal_off': []
+                            #}
+                            
                             l_onOffdict= {
-                                'on': [], 'off': [],'cal_on':[], 'cal_off': []
+                                'on': l_base_path + "section_{}_pol_{}_on.fits".format(l_chx, l_pol),
+                                'off': l_base_path + "section_{}_pol_{}_off.fits".format(l_chx, l_pol),
+                                'cal_on':l_base_path + "section_{}_pol_{}_cal_on.fits".format(l_chx, l_pol),
+                                'cal_off': l_base_path + "section_{}_pol_{}_cal_off.fits".format(l_chx, l_pol)
                             }
+                            
                             #pdb.set_trace()
                             if l_pol not in self.m_group_on_off_cal[l_feed][l_chx].keys():
                                 self.m_group_on_off_cal[l_feed][l_chx][l_pol]= l_onOffdict
                             try:
-                                # Polarization on disk table, ecery subscan has a file
-                                l_stack_path= l_base_path + "section_{}_pol_{}_{}.fits".format(l_chx, l_pol, l_file_name)
-                                self.m_group_on_off_cal[l_feed][l_chx][l_pol]['on'].append(l_stack_path)
+                                # Converting qtable to fits table and join existing table
+                                # Reading on disk QTable and append to astropy fits table
+                                # through conversion                                
+                                #l_stack_path= l_base_path + "section_{}_pol_{}_{}.fits".format(l_chx, l_pol, l_file_name)
+ #                               self.m_group_on_off_cal[l_feed][l_chx][l_pol]['on'].append(l_stack_path)                                
                                 l_disk_table= QTable()
                                 if os.path.exists(l_stack_path):
-                                    l_disk_table= QTable.read(l_stack_path)
-                                    l_disk_table= vstack([l_disk_table, group])
-                                    l_disk_table.write(l_stack_path, overwrite= True)
+                                    
+                                    # TODO 
+                                    #l_disk_table= QTable.read(l_stack_path)
+                                    #l_disk_table= vstack([l_disk_table, group])
+                                    #l_disk_table.write(l_stack_path, overwrite= True)
                                     self.m_logger.info('Overw. existing table {}'.format(l_stack_path))
                                 else:
                                     self.m_logger.info('Creating new table {}'.format(l_stack_path))
@@ -562,19 +518,20 @@ class Fitslike_handler():
         un file per ogni uno
 
         """
-        
+
         def getQTableColWithUnit(p_table, p_col, p_unit):
-            """ Get QTable[col_u_unit] data adding unit to returned data """
+            """ Get QTable[col_u_unit] data adding unit to returned data """            
             l_col_names= p_table.colnames
             for col_name in l_col_names:
                 if p_col in col_name:
-                    l_field_unit= col_name.split('_u_')
+                    l_field_unit= col_name.split('_u_')                    
                     if len(l_field_unit) == 2:
                         data= p_table[col_name] * unit.Unit(l_field_unit[1])
                         data= data.to(p_unit).value
+                        return data
 
-                        
-        
+
+
         for l_feed in self.m_group_on_off_cal:
             # Feed filter added by user ?
             if self.m_feed:
@@ -614,7 +571,7 @@ class Fitslike_handler():
                         self.m_obs_general_data['dec']= l_chx['scheduled']['dec'].to(unit.deg).value
                         self.m_obs_general_data['source']= l_chx['scheduled']['source']
                         self.m_obs_general_data['date-red']= Time.now().to_datetime().strftime('%d/%m/%y')
-                        # classfits new dict filling process                        
+                        # classfits new dict filling process
                         l_class_data= {}
                         # ch by ch
                         try:
@@ -671,7 +628,7 @@ class Fitslike_handler():
                             # Objects Coordinates
                             l_class_data['CDELT2'] = l_chx['scheduled']['ra_offset'].to(unit.deg).value
                             l_class_data['CDELT3'] = l_chx['scheduled']['dec_offset'].to(unit.deg).value
-                            
+
                             l_class_data['AZIMUTH']= getQTableColWithUnit(l_polarization_table,'data_az', unit.deg)
                             l_class_data['ELEVATIO']= getQTableColWithUnit(l_polarization_table,'data_el', unit.deg)
                             l_class_data['CRVAL2']= getQTableColWithUnit(l_polarization_table,'data_ra', unit.deg)
@@ -692,22 +649,26 @@ class Fitslike_handler():
                                     l_class_data[k]= np.full((rows,), l_value)
                                 except Exception  as e :
                                     self.m_logger.error("Error reshaping classfits data: " +str(e))
-                            # Transform dictionary based converted table in QTable on disk
-                            l_class_table= QTable()                            
+                            # Transform dictionary based converted table in QTable on disk                            
+                            l_class_table= QTable()
                             for col in l_class_data.keys():
                                 try:
-                                    # Skip empty columns                                
-                                    if type(l_class_data[col]) != list : continue                                                                            
-                                    if any(l_class_data[col]):
-                                        l_class_table.add_column( Column(data= l_class_data[col], name= col) )
+                                    # Skip empty columns
+                                    l_class_table.add_column( Column(data= l_class_data[col], name= col) )
                                 except ValueError as e:
-                                    self.m_logger.error("Exception adding column [{}] to classfit converted table {}".format(col, e))                                    
+                                    self.m_logger.error("Exception adding column [{}] to classfit converted table {}".format(col, e))
                             # Table name generation
-                            l_splitted_path= os.path.splitext(l_pol_table_path)                                                        
+                            l_splitted_path= os.path.splitext(l_pol_table_path)
                             l_class_path= l_splitted_path[0].replace('.','_')+'_class.fits'
                             self.m_logger.info("input table path: {}".format(l_pol_table_path))
                             self.m_logger.info("class table path: {}".format(l_class_path))
-                            l_class_table.write(l_class_path)
+                            try:                                
+                                l_class_table.write(l_class_path)
+                            except ValueError as e:                                
+                                self.m_logger.error("-------- ERROR begin--------")
+                                traceback.print_stack()
+                                self.m_logger.error("Error writing small classfit table to disk {}".format(e))
+                                self.m_logger.error("-------- ERROR end--------")                                
                             classfits.append(l_class_path)
                         except TypeError as e:
                             traceback.print_exc()

@@ -16,6 +16,7 @@ import traceback
 import pdb
 from memory_profiler import profile
 
+from fit_to_class.fitslike_commons import keywords as kws
 from fit_to_class import fitslike_keywords
 from fit_to_class import fitslike_commons
 
@@ -637,6 +638,8 @@ class Awarness_fitszilla():
                 for el in l_weather:
                     l_chx['extras']['weather'].append(\
                         self.m_commons.calculate_weather(el[1] + 273.15, el[0]))
+                        
+    
 
     def _group_data_and_coords(self):
         """
@@ -650,8 +653,78 @@ class Awarness_fitszilla():
 
         At the end of operation data table has integrated data and grouped table
 
+        Stage 2:
+            
+            Check on off cal..            
+            grouping by on off cal also
+
         @todo Attenzione, non riesco ad aggregare la tabella se inserisco i dati cone unit !!
         """
+        
+        def _is_cal(p_subscan, p_group):
+            """
+            Genera il flag calibrazione attiva
+
+            Parameters
+            ----------
+            p_sub : astropy table group
+                group with flag_cal
+
+            p_subscan : subscan with meta data
+                group with flag_cal
+
+            Returns
+            -------
+            true calibrazione attiva
+
+            """
+            l_signal= p_subscan['scheduled']['signal']
+            if l_signal in kws['keys_cal_on']:
+                return True
+            # TODO Check this part..
+            #elif np.any(p_group['flag_cal']):
+            #    return True
+            # TODO Non chiaro...
+            #if p_group['flag_cal'] > 0:
+            #    return True
+            return False
+
+        def _is_on(p_subScan):
+            """
+            Verifica se la subscan è un on o un off
+
+            Parameters
+            ----------
+            p_subscan : dict
+                subscan ch_x
+            
+            p_subscan : subscan with meta data
+                group with flag_cal
+                
+
+            Returns
+            -------
+            None.
+
+            """
+            l_signal= p_subScan['scheduled']['signal']
+            l_feed= p_subScan['frontend']['feed']
+            if l_signal in kws['keys_on']:
+                if l_feed == 0:
+                    return True
+                else:
+                    return False
+            else:
+                if l_feed == 0:
+                    return False
+                else:
+                    return True
+            if l_signal == None :
+                return p_subScan['ccordinates']['az_offset'] > 1e-4 * unit.rad
+            
+            
+        # Start function
+        
         for feed in self.m_processedRepr.keys():
             # Work only selected feed
             if self.m_feed:
@@ -711,30 +784,37 @@ class Awarness_fitszilla():
                             traceback.print_exc()
                             self.m_logger.error("Exception creating data tables for stokes data : " +str(e) )
                             pdb.set_trace()
-                            continue
+                            continue                                            
                         # Add this pol table to table list
                         l_tGroupPol.append(l_oneTable)
                     # Group and aggregation 
                     if l_tGroupPol:
-                        l_oneTable= vstack(l_tGroupPol)
-                        l_oneTableGroup= l_oneTable.group_by(['pol', 'flag_cal'])
-                        " @todo for an unkown reason i cannot aggregate data column..doing it manually "
-                        #if 'data' not in l_oneTableAggregated.colnames:
-                        """
-                        if 'data' in l_oneTable.colnames:
-                            self.m_logger.warning("Aggretating data column manually")
-                            l_spectrum= []
-                            for gr in l_oneTable.groups:
-                                l_data= gr['data']
-                                #l_spectrum.append(np.mean(l_data, axis= 0))
-                                #l_spectrum= l_spectrum + l_data
-                                for r in l_data:
-                                    l_spectrum.append(r)
-                            l_spectrum_arr= np.asarray(l_spectrum)
-                            print(l_spectrum_arr.shape)
-                            l_dataCol= Column(l_spectrum_arr, name= 'whole_data')
-                        """
-                        l_chx['groups']= l_oneTableGroup
+                        # Regroup data from varius pol into one table
+                        l_oneTable= vstack(l_tGroupPol)                        
+                        # Adding ON OFF column to the whole table
+                        l_isOn= _is_on(l_chx)                                                        
+                        if l_isOn:
+                            on_col_data= [1]*len(l_oneTable)
+                        else:
+                            on_col_data= [1]*len(l_oneTable)                                                        
+                        on_col= Column(on_col_data, 'is_on')
+                        l_oneTable.add_column(on_col)                                                
+                        # TODO check this part
+                        # Adding on off cal column
+                        l_temporary_tables= []
+                        for single_group in  l_oneTable.group_by(['pol', 'is_on', 'flag_cal']).groups:                                                        
+                            # Cal on cal off    
+                            l_isCal= _is_cal(l_chx, single_group)
+                            if l_isCal:
+                                cal_col_data= [1]*len(single_group)
+                            else:
+                                cal_col_data= [0]*len(single_group)
+                            cal_col= Column(cal_col_data, 'is_cal')
+                            single_group.add_column(cal_col)
+                            l_temporary_tables.append(single_group)
+                        # Stack and group
+                        l_stacked= vstack(l_temporary_tables)
+                        l_chx['groups']= l_stacked.group_by(['pol', 'flag_cal','is_on', 'is_cal']).groups                        
                     else:
                         l_chx['groups']= QTable()
 
@@ -755,19 +835,19 @@ class Awarness_fitszilla():
                             "data_el", "data_derot_angle", "data_ra",
                             "data_dec", "weather", "data", "flag_cal"]
                     for n, v in zip(l_names, l_keys):
-                        " If i have scalar without quantity "
+                        # If i have scalar without quantity 
                         try:
                             name_unit= n +"_u_" + str(v.unit)
                             col=  Column(v.value, name= name_unit )
                         except:
                             col=  Column(v, name= n )
                         l_oneTable.add_column(col)
-                    " group and aggregate "
+                    # Group and aggregate 
                     l_integrationTime = len(l_oneTable) * l_chx['backend']['integration_time']
                     l_chx['backend']['integration_time']= l_integrationTime
                     l_oneTable= l_oneTable.group_by(['pol','flag_cal'])
                     l_oneTableAggregated= l_oneTable.groups.aggregate(np.mean)
-                    " @todo for an unkown reason i cannot aggregate data column..doing it manually "
+                    # TODO for an unkown reason i cannot aggregate data column..doing it manually 
                     if 'data' not in l_oneTableAggregated.colnames:
                         self.m_logger.warning("Aggretating data column manually")
                         l_spectrum= []
@@ -779,7 +859,7 @@ class Awarness_fitszilla():
                         l_oneTableAggregated= l_oneTableAggregated.group_by(['pol', 'flag_cal'])
                     l_chx['groups']= l_oneTableAggregated
 
-                " remove data already present in groups "
+                # Remove data already present in groups 
                 del l_coo["time_mjd"]
                 del l_coo["data_time"]
                 del l_coo["data_az"]
@@ -791,6 +871,8 @@ class Awarness_fitszilla():
                 del l_spec["data"]
                 del l_spec["flag_cal"]
 
+                
+                
     def _errorFromMissingKeyword(self, p_section, p_key):
         """
         Set  error for process upon missing keyws from fitszilla
