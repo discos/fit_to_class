@@ -14,13 +14,13 @@ from fit_to_class  import fitslike
 from fit_to_class  import awarness_fitszilla
 
 
-def main(p_file, p_type):
+def main(p_file, p_type, p_path= ''):
     """Parse a fitszilla through Awarness_fitszilla
     p_file: input file path
     p_type: scan type
     """
     l_fits = fits.open(p_file)        
-    l_aware = awarness_fitszilla.Awarness_fitszilla(l_fits, p_file)        
+    l_aware = awarness_fitszilla.Awarness_fitszilla(l_fits, p_file)            
     l_intermediateDict = l_aware.parse()
     l_processedDict = l_aware.process()         
     l_fitsLike = fitslike.Fitslike(l_processedDict)        

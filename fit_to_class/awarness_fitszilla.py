@@ -3,17 +3,19 @@
 
     Fits format awarness, it handles fits data toward fits like representation
 """
+
+import numpy as np
+import copy
+import logging
+import os
+import shutil
+import pdb
+
 from astropy.coordinates import EarthLocation, AltAz, Angle, ICRS
 import astropy.io.fits as fits
 import astropy.units as unit
 from astropy.time import Time
 from astropy.table import  QTable, vstack, Column
-import numpy as np
-import copy
-import logging
-import os
-import traceback
-import pdb
 from memory_profiler import profile
 
 from fit_to_class.fitslike_commons import keywords as kws
@@ -39,12 +41,11 @@ class Awarness_fitszilla():
         p_feed: int
             Number of feed to parse (None parse all)
 
-        Returns
-        -------
-        None
         """
         self.m_errors= [] # errori interni, stringa composta, cchi come
         l_path, self.m_fileName = os.path.split(p_path)
+        self.m_path= l_path
+        self.m_outputPath= self.m_path
         self.m_commons = fitslike_commons.Fitslike_commons()
         self.m_jsonRepr = fitslike_keywords.Keyword_json('fitszilla')
         self.m_components = self.m_jsonRepr.fitslike_components()
@@ -111,6 +112,10 @@ class Awarness_fitszilla():
                     #self.m_logger.error("Missing [table, keyword] %s: %s",
                     #                    l_key, l_inputKeyword)
         return self.m_intermediate
+
+    def setOutputPath(self, p_path):
+        """set output path to write intermediate processing file"""
+        self.m_outputPath= p_path
 
     def getErrorList(self):
         """
@@ -307,8 +312,7 @@ class Awarness_fitszilla():
                         self.m_intermediate['fe_cal_mark_temp'],
                         )
         except Exception as e:
-            self.m_logger.error("frontend end zip error: " +str(e))
-            traceback.print_exc()
+            self.m_logger.error("frontend end zip error: " +str(e))            
         # create dict[backend_id]= front end
         for l_zipFe in l_zipFrontEnds:
             l_feDict= dict(zip(l_feDictKeys, l_zipFe))
@@ -345,8 +349,7 @@ class Awarness_fitszilla():
                         self.m_intermediate['be_data_type']
                         )
         except Exception as e:
-            self.m_logger.error("back end zip error: " +str(e))
-            traceback.print_exc()
+            self.m_logger.error("back end zip error: " +str(e))        
 
         # create dict[backend_id]= back end
         for l_zipBe in l_zipBackend:
@@ -638,8 +641,8 @@ class Awarness_fitszilla():
                 for el in l_weather:
                     l_chx['extras']['weather'].append(\
                         self.m_commons.calculate_weather(el[1] + 273.15, el[0]))
-                        
-    
+
+
 
     def _group_data_and_coords(self):
         """
@@ -654,13 +657,13 @@ class Awarness_fitszilla():
         At the end of operation data table has integrated data and grouped table
 
         Stage 2:
-            
-            Check on off cal..            
+
+            Check on off cal..
             grouping by on off cal also
 
         @todo Attenzione, non riesco ad aggregare la tabella se inserisco i dati cone unit !!
         """
-        
+
         def _is_cal(p_subscan, p_group):
             """
             Genera il flag calibrazione attiva
@@ -697,10 +700,10 @@ class Awarness_fitszilla():
             ----------
             p_subscan : dict
                 subscan ch_x
-            
+
             p_subscan : subscan with meta data
                 group with flag_cal
-                
+
 
             Returns
             -------
@@ -721,10 +724,10 @@ class Awarness_fitszilla():
                     return True
             if l_signal == None :
                 return p_subScan['ccordinates']['az_offset'] > 1e-4 * unit.rad
-            
-            
+
+
         # Start function
-        
+
         for feed in self.m_processedRepr.keys():
             # Work only selected feed
             if self.m_feed:
@@ -764,14 +767,14 @@ class Awarness_fitszilla():
                         polLabel= np.full((poldata.shape[0],), polLabel)
                         l_oneTable= QTable()
                         try:
-                            l_keys= [l_coo["data_time"], polLabel, l_coo["data_az"],
+                            l_keys= ["data_time_mjd", "pol", "data_az",
+                                    "data_el", "data_derot_anngle", "data_ra",
+                                    "data_dec", "weather", "data", "flag_cal"]
+                            l_data= [l_coo["data_time"], polLabel, l_coo["data_az"],
                                      l_coo["data_el"],l_coo["data_derot_angle"],l_coo["data_ra"],
                                      l_coo["data_dec"], l_chx['extras']['weather'], poldata,
                                      l_spec["flag_cal"]]
-                            l_names= ["data_time_mjd", "pol", "data_az",
-                                    "data_el", "data_derot_anngle", "data_ra",
-                                    "data_dec", "weather", "data", "flag_cal"]
-                            for n, v in zip(l_names, l_keys):
+                            for n, v in zip(l_keys, l_data):
                                 # If i have scalar without quantity
                                 try:
                                     name_unit= n +"_u_" + str(v.unit)
@@ -779,44 +782,70 @@ class Awarness_fitszilla():
                                 except:
                                     col=  Column(v, name= n )
                                 l_oneTable.add_column(col)
-                                
+
                         except Exception as e:
-                            traceback.print_exc()
-                            self.m_logger.error("Exception creating data tables for stokes data : " +str(e) )
+                            self.m_logger.error("Exception creating data tables for stokes data : {}".format(e) )
                             pdb.set_trace()
-                            continue                                            
+                            continue
                         # Add this pol table to table list
                         l_tGroupPol.append(l_oneTable)
-                    # Group and aggregation 
-                    if l_tGroupPol:
-                        # Regroup data from varius pol into one table
-                        l_oneTable= vstack(l_tGroupPol)                        
-                        # Adding ON OFF column to the whole table
-                        l_isOn= _is_on(l_chx)                                                        
-                        if l_isOn:
-                            on_col_data= [1]*len(l_oneTable)
-                        else:
-                            on_col_data= [1]*len(l_oneTable)                                                        
-                        on_col= Column(on_col_data, 'is_on')
-                        l_oneTable.add_column(on_col)                                                
-                        # TODO check this part
-                        # Adding on off cal column
-                        l_temporary_tables= []
-                        for single_group in  l_oneTable.group_by(['pol', 'is_on', 'flag_cal']).groups:                                                        
-                            # Cal on cal off    
-                            l_isCal= _is_cal(l_chx, single_group)
-                            if l_isCal:
-                                cal_col_data= [1]*len(single_group)
-                            else:
-                                cal_col_data= [0]*len(single_group)
-                            cal_col= Column(cal_col_data, 'is_cal')
-                            single_group.add_column(cal_col)
-                            l_temporary_tables.append(single_group)
-                        # Stack and group
-                        l_stacked= vstack(l_temporary_tables)
-                        l_chx['groups']= l_stacked.group_by(['pol', 'flag_cal','is_on', 'is_cal']).groups                        
-                    else:
+                    # Group and aggregation
+                    if not l_tGroupPol:
                         l_chx['groups']= QTable()
+                        continue                    
+                    # Regroup data from varius pol into one table
+                    l_oneTable= vstack(l_tGroupPol)
+                    # Adding ON OFF column to the whole table
+                    l_isOn= _is_on(l_chx)
+                    if l_isOn:
+                        on_col_data= [1]*len(l_oneTable)
+                    else:
+                        on_col_data= [1]*len(l_oneTable)
+                    on_col= Column(on_col_data, 'is_on')
+                    l_oneTable.add_column(on_col)
+                    # TODO check this part
+                    # Adding on off cal column
+                    l_temporary_tables= []
+                    for group in  l_oneTable.group_by(['pol']).groups:
+                        # Cal on cal off
+                        l_isCal= _is_cal(l_chx, group)
+                        #Cal on
+                        if l_isCal and np.any(group['is_on']):
+                            cal_on_col= Column([1]*len(group),'cal_on')
+                            group.add_column(cal_on_col)
+                        #Cal off
+                        if l_isCal and not np.any(group['is_on']):
+                            cal_off_col= Column([1]*len(group),'cal_off')
+                            group.add_column(cal_off_col)
+                        # Signal
+                        if not l_isCal and np.any(group['is_on']):
+                            signal_col= Column([1]*len(group),'signal')
+                            group.add_column(signal_col)                            
+                        # Off
+                        if not l_isCal and not np.any(group['is_on']):
+                            off_col= Column([1]*len(group),'reference')
+                            group.add_column(off_col)
+                        # Removing unusefull data from table group 
+                        del group['is_on']
+                        del group['flag_cal']
+                        # Save group with new columns
+                        l_temporary_tables.append(group)
+                    # Stack and group with on and cal
+                    l_stacked= vstack(l_temporary_tables)
+                    l_chx['groups_by_pol']= l_stacked.group_by(['pol']).groups
+                    # Write groups to disk
+                    l_pols={}
+                    for group in l_chx['groups_by_pol']:
+                        # Write table to disk
+                        if 'pol' in group.colnames:
+                            l_pols[group['pol'][0]]= self._writeTableToFile(group, feed, chx, group['pol'][0])
+                        else:
+                            self.m_logger.error("Missing polarization label! skip table")
+                    # Keep trace of on disk tables
+                    l_chx['pol_tables_dict']= l_pols
+                    # Remove unesfull data on fits representation
+                    del l_chx['groups_by_pol']                    
+                        
 
                 else: # SPECTRUM OR SINGLE POL
                     " manage pwr spectrum "
@@ -835,19 +864,19 @@ class Awarness_fitszilla():
                             "data_el", "data_derot_angle", "data_ra",
                             "data_dec", "weather", "data", "flag_cal"]
                     for n, v in zip(l_names, l_keys):
-                        # If i have scalar without quantity 
+                        # If i have scalar without quantity
                         try:
                             name_unit= n +"_u_" + str(v.unit)
                             col=  Column(v.value, name= name_unit )
                         except:
                             col=  Column(v, name= n )
                         l_oneTable.add_column(col)
-                    # Group and aggregate 
+                    # Group and aggregate
                     l_integrationTime = len(l_oneTable) * l_chx['backend']['integration_time']
                     l_chx['backend']['integration_time']= l_integrationTime
                     l_oneTable= l_oneTable.group_by(['pol','flag_cal'])
                     l_oneTableAggregated= l_oneTable.groups.aggregate(np.mean)
-                    # TODO for an unkown reason i cannot aggregate data column..doing it manually 
+                    # TODO for an unkown reason i cannot aggregate data column..doing it manually
                     if 'data' not in l_oneTableAggregated.colnames:
                         self.m_logger.warning("Aggretating data column manually")
                         l_spectrum= []
@@ -859,7 +888,7 @@ class Awarness_fitszilla():
                         l_oneTableAggregated= l_oneTableAggregated.group_by(['pol', 'flag_cal'])
                     l_chx['groups']= l_oneTableAggregated
 
-                # Remove data already present in groups 
+                # Remove data already present in groups
                 del l_coo["time_mjd"]
                 del l_coo["data_time"]
                 del l_coo["data_az"]
@@ -871,8 +900,49 @@ class Awarness_fitszilla():
                 del l_spec["data"]
                 del l_spec["flag_cal"]
 
-                
-                
+    def _writeTableToFile(self, p_table, p_feed, p_section, p_pol) -> str:
+        """
+        Writes table group to disk grouped by feed, section, pol
+        Doesn't overwrite output folder, it creates the folder when missing
+        (one folder per feed)
+
+        Parameters
+        ----------
+        p_table : QTable
+            table to write on disk.
+        p_feed : int
+            feed number
+        p_section : string
+            section number
+        p_pol : string
+            polarization
+        
+        Returns:
+        --------
+        table on disk path
+        """
+        try:
+            l_fname= os.path.join(self.m_outputPath, "fits")
+            # Create fits/feed_{}
+            if not os.path.exists(l_fname):
+                os.mkdir(l_fname)
+            l_fname= os.path.join(l_fname,'feed_{}'.format(p_feed))
+            if not os.path.exists(l_fname):             
+                os.mkdir(l_fname)
+            # If file il is already present remove it
+            l_fname= os.path.join(l_fname, "{}_{}_{}.fits".format(p_section, p_pol, self.m_fileName))
+            if os.path.exists(l_fname):
+                os.remove(l_fname)
+            p_table.write(l_fname)
+            return l_fname
+        except IOError as e:
+            self.m_logger.error("IO Exception writing intermediate table to disk: \n {} \n {}".format(l_fname, e))
+            return ''
+        except Exception as e:
+            self.m_logger.error("Exception writing intermediate table to disk: \n {} \n {}".format(l_fname, e))
+            return ''
+
+
     def _errorFromMissingKeyword(self, p_section, p_key):
         """
         Set  error for process upon missing keyws from fitszilla

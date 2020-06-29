@@ -23,7 +23,7 @@ from fit_to_class.fitslike_commons import keywords as kws
 from fit_to_class import fitslike_commons
 
 
-def _envelope_subscan(p_logger, p_ftype, p_feed, p_path) -> dict:
+def _envelope_subscan(p_logger, p_ftype, p_feed, p_inpath, p_outpath) -> dict:
     """
     Embeds Fitslike subscan parsing
 
@@ -43,15 +43,16 @@ def _envelope_subscan(p_logger, p_ftype, p_feed, p_path) -> dict:
 
     """
     "todo comporre il parsing attraverso il fitslike ?"
-    p_logger.info("Scanning " + p_path)
-    l_path, l_filename= os.path.split(p_path)
-    p_logger.info("fitszilla parsing: " + p_path)
+    p_logger.info("Scanning " + p_inpath)
+    l_path, l_filename= os.path.split(p_inpath)
+    p_logger.info("fitszilla parsing: " + p_inpath)
     try:
-        l_fits = fits.open(p_path)
+        l_fits = fits.open(p_inpath)
     except Exception as e:
-        p_logger.error("Skipping input file {} due to an excpetion: \n{}".format(p_path, e))
+        p_logger.error("Skipping input file {} due to an excpetion: \n{}".format(p_inpath, e))
         return {}
-    l_aware= awarness_fitszilla.Awarness_fitszilla(l_fits, p_path, p_feed)
+    l_aware= awarness_fitszilla.Awarness_fitszilla(l_fits, p_inpath, p_feed)
+    l_aware.setOutputPath(p_outpath)
     l_aware.parse()
     l_repr= l_aware.process()
     l_errors= l_aware.getErrorList()
@@ -134,12 +135,12 @@ class Fitslike_handler():
         """ output path setter"""
         self.m_outputPath= p_path
         # Output dir creation
-        try:
-            if os.path.exists(self.m_outputPath):
-                shutil.rmtree(self.m_outputPath)
-            os.mkdir(self.m_outputPath)
-        except Exception as e:
-            self.m_logger.error("Error creating tmp dir {}".format(e))
+        # try:
+        #     if os.path.exists(self.m_outputPath):
+        #         shutil.rmtree(self.m_outputPath)
+        #     os.mkdir(self.m_outputPath)
+        # except Exception as e:
+        #     self.m_logger.error("Error creating tmp dir {}".format(e))
 
     def get_summary(self):
         """Getter summary"""
@@ -172,9 +173,10 @@ class Fitslike_handler():
             return
         # Processing
         l_filt= self.m_commons.filter_input_files(self.m_inputType)
-        l_inputFiles= []
-        for dirpath, dirnames, filenames in os.walk(self.m_dataDir):
-            l_inputFiles.extend(filenames)
+        l_inputFiles= []        
+        for item in os.listdir(self.m_dataDir):
+            if os.path.isfile(os.path.join(self.m_dataDir,item)):
+                l_inputFiles.append(item)        
         l_inputFiles= [f for f in l_inputFiles if re.match(l_filt,f)]
         # Split parsing multiprocessing
         self.m_results=[]
@@ -183,12 +185,13 @@ class Fitslike_handler():
             l_results=[]
             self.m_pool=Pool(l_poolSize)
             for l_fPath in l_group:
-                l_results.append( self.m_pool.apply_async(
+                l_results.append(self.m_pool.apply_async(
                         _envelope_subscan,
                         [self.m_logger,
                         'fitszilla',
                         self.m_feed,
-                        p_dataDir +'/'+ l_fPath
+                        p_dataDir +'/'+ l_fPath,
+                        self.m_outputPath
                         ])
                     )
             self.m_pool.close()
