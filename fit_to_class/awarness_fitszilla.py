@@ -692,7 +692,7 @@ class Awarness_fitszilla():
             #    return True
             return False
 
-        def _is_on(p_subScan):
+        def _is_on(p_subScan, p_feed):
             """
             Verifica se la subscan è un on o un off
 
@@ -710,21 +710,19 @@ class Awarness_fitszilla():
             None.
 
             """
-            l_signal= p_subScan['scheduled']['signal']
-            l_feed= p_subScan['frontend']['feed']
+            l_signal= p_subScan['scheduled']['signal']            
             if l_signal in kws['keys_on']:
-                if l_feed == 0:
+                if p_feed == 0:
                     return True
                 else:
                     return False
             else:
-                if l_feed == 0:
+                if p_feed == 0:
                     return False
                 else:
                     return True
             if l_signal == None :
                 return p_subScan['ccordinates']['az_offset'] > 1e-4 * unit.rad
-
 
         # Start function
 
@@ -765,7 +763,7 @@ class Awarness_fitszilla():
                         poldata= obj[0].astype(np.int32)
                         polLabel= obj[1]
                         polLabel= np.full((poldata.shape[0],), polLabel)
-                        l_oneTable= QTable()
+                        l_pol_table= QTable()
                         try:
                             l_keys= ["data_time_mjd", "pol", "data_az",
                                     "data_el", "data_derot_anngle", "data_ra",
@@ -781,72 +779,21 @@ class Awarness_fitszilla():
                                     col=  Column(v.value, name= name_unit )
                                 except:
                                     col=  Column(v, name= n )
-                                l_oneTable.add_column(col)
+                                l_pol_table.add_column(col)
 
                         except Exception as e:
                             self.m_logger.error("Exception creating data tables for stokes data : {}".format(e) )
                             pdb.set_trace()
                             continue
                         # Add this pol table to table list
-                        l_tGroupPol.append(l_oneTable)
+                        l_tGroupPol.append(l_pol_table)
                     # Group and aggregation
                     if not l_tGroupPol:
                         l_chx['groups']= QTable()
-                        continue                    
+                        continue                                      
                     # Regroup data from varius pol into one table
                     l_oneTable= vstack(l_tGroupPol)
-                    # Adding ON OFF column to the whole table
-                    l_isOn= _is_on(l_chx)
-                    if l_isOn:
-                        on_col_data= [1]*len(l_oneTable)
-                    else:
-                        on_col_data= [1]*len(l_oneTable)
-                    on_col= Column(on_col_data, 'is_on')
-                    l_oneTable.add_column(on_col)
-                    # TODO check this part
-                    # Adding on off cal column
-                    l_temporary_tables= []
-                    for group in  l_oneTable.group_by(['pol']).groups:
-                        # Cal on cal off
-                        l_isCal= _is_cal(l_chx, group)
-                        #Cal on
-                        if l_isCal and np.any(group['is_on']):
-                            cal_on_col= Column([1]*len(group),'cal_on')
-                            group.add_column(cal_on_col)
-                        #Cal off
-                        if l_isCal and not np.any(group['is_on']):
-                            cal_off_col= Column([1]*len(group),'cal_off')
-                            group.add_column(cal_off_col)
-                        # Signal
-                        if not l_isCal and np.any(group['is_on']):
-                            signal_col= Column([1]*len(group),'signal')
-                            group.add_column(signal_col)                            
-                        # Off
-                        if not l_isCal and not np.any(group['is_on']):
-                            off_col= Column([1]*len(group),'reference')
-                            group.add_column(off_col)
-                        # Removing unusefull data from table group 
-                        del group['is_on']
-                        del group['flag_cal']
-                        # Save group with new columns
-                        l_temporary_tables.append(group)
-                    # Stack and group with on and cal
-                    l_stacked= vstack(l_temporary_tables)
-                    l_chx['groups_by_pol']= l_stacked.group_by(['pol']).groups
-                    # Write groups to disk
-                    l_pols={}
-                    for group in l_chx['groups_by_pol']:
-                        # Write table to disk
-                        if 'pol' in group.colnames:
-                            l_pols[group['pol'][0]]= self._writeTableToFile(group, feed, chx, group['pol'][0])
-                        else:
-                            self.m_logger.error("Missing polarization label! skip table")
-                    # Keep trace of on disk tables
-                    l_chx['pol_tables_dict']= l_pols
-                    self.m_logger.info(l_chx['pol_tables_dict'])
-                    # Remove unesfull data on fits representation
-                    del l_chx['groups_by_pol']                    
-
+                    
                 else: # SPECTRUM OR SINGLE POL
                     " manage pwr spectrum "
                     l_oneTable = QTable()
@@ -870,24 +817,8 @@ class Awarness_fitszilla():
                             col=  Column(v.value, name= name_unit )
                         except:
                             col=  Column(v, name= n )
-                        l_oneTable.add_column(col)
-                    # Group and aggregate
-                    l_integrationTime = len(l_oneTable) * l_chx['backend']['integration_time']
-                    l_chx['backend']['integration_time']= l_integrationTime
-                    l_oneTable= l_oneTable.group_by(['pol','flag_cal'])
-                    l_oneTableAggregated= l_oneTable.groups.aggregate(np.mean)
-                    # TODO for an unkown reason i cannot aggregate data column..doing it manually
-                    if 'data' not in l_oneTableAggregated.colnames:
-                        self.m_logger.warning("Aggretating data column manually")
-                        l_spectrum= []
-                        for gr in l_oneTable.groups:
-                            l_data= gr['data']
-                            l_spectrum.append(np.mean(l_data, axis= 0))
-                        l_dataCol= Column(l_spectrum, name= 'data')
-                        l_oneTableAggregated.add_column(l_dataCol)
-                        l_oneTableAggregated= l_oneTableAggregated.group_by(['pol', 'flag_cal'])
-                    l_chx['groups']= l_oneTableAggregated
-
+                        l_oneTable.add_column(col)                                     
+                
                 # Remove data already present in groups
                 del l_coo["time_mjd"]
                 del l_coo["data_time"]
@@ -899,6 +830,64 @@ class Awarness_fitszilla():
                 del l_chx['extras']['weather']
                 del l_spec["data"]
                 del l_spec["flag_cal"]                              
+
+                # One table to rule'em all   
+                
+                # Adding ON OFF column to the whole table
+                l_isOn= _is_on(l_chx, feed)
+                if l_isOn:
+                    on_col_data= [1]*len(l_oneTable)
+                else:
+                    on_col_data= [0]*len(l_oneTable)
+                on_col= Column(on_col_data, 'is_on')
+                l_oneTable.add_column(on_col)                
+                # Adding on off cal column
+                l_temporary_tables= []
+                for group in  l_oneTable.group_by(['pol']).groups:
+                    # Cal on cal off
+                    l_isCal= _is_cal(l_chx, group)
+                    #Cal on
+                    if l_isCal and np.any(group['is_on']):
+                        cal_on_col= Column([1]*len(group),'cal_on')
+                        group.add_column(cal_on_col)
+                        self.m_logger.info("{}_{}_{} is cal_on".format(feed, chx, group['pol'][0]))
+                    #Cal off
+                    if l_isCal and not np.any(group['is_on']):
+                        cal_off_col= Column([1]*len(group),'cal_off')
+                        group.add_column(cal_off_col)
+                        self.m_logger.info("{}_{}_{} is cal_off".format(feed, chx, group['pol'][0]))
+                    # Signal
+                    if not l_isCal and np.any(group['is_on']):
+                        signal_col= Column([1]*len(group),'signal')
+                        group.add_column(signal_col)           
+                        self.m_logger.info("{}_{}_{} is signal".format(feed, chx, group['pol'][0]))
+                    # Off
+                    if not l_isCal and not np.any(group['is_on']):
+                        off_col= Column([1]*len(group),'reference')
+                        group.add_column(off_col)
+                        self.m_logger.info("{}_{}_{} is reference".format(feed, chx, group['pol'][0]))
+                    # Removing unusefull data from table group 
+                    del group['is_on']
+                    del group['flag_cal']
+                    # Save group with new columns
+                    l_temporary_tables.append(group)
+                # Stack and group with on/off and cal on/cal off
+                l_stacked= vstack(l_temporary_tables)
+                l_chx['groups_by_pol']= l_stacked.group_by(['pol']).groups
+                # Write groups to disk
+                l_pols={}
+                for group in l_chx['groups_by_pol']:
+                    # Write table to disk
+                    if 'pol' in group.colnames:
+                        l_pols[group['pol'][0]]= self._writeTableToFile(group, feed, chx, group['pol'][0])
+                    else:
+                        self.m_logger.error("Missing polarization label! skip table")
+                # Keep trace of on disk tables
+                l_chx['pol_tables_dict']= l_pols                
+                # Remove unesfull data on fits representation
+                del l_chx['groups_by_pol']                    
+                    
+
 
     def _writeTableToFile(self, p_table, p_feed, p_section, p_pol) -> str:
         """
