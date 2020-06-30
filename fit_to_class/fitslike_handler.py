@@ -173,10 +173,10 @@ class Fitslike_handler():
             return
         # Processing
         l_filt= self.m_commons.filter_input_files(self.m_inputType)
-        l_inputFiles= []        
+        l_inputFiles= []
         for item in os.listdir(self.m_dataDir):
             if os.path.isfile(os.path.join(self.m_dataDir,item)):
-                l_inputFiles.append(item)        
+                l_inputFiles.append(item)
         l_inputFiles= [f for f in l_inputFiles if re.match(l_filt,f)]
         # Split parsing multiprocessing
         self.m_results=[]
@@ -224,22 +224,12 @@ class Fitslike_handler():
         but generally per feed
         """
 
-        def _getGroupPol( p_group):
-            """ Get Polarization flag """
-            return p_group['pol'][0]
-
-   
-
-        " ordino le subscan in base al file name "
+        # Subscan filename sorting
         self.m_subscans= sorted(self.m_subscans,\
                                 key= lambda item:('file_name' not in item, item.get('file_name', None)))
 
-        # Work dir
-        os.chdir(self.m_outputPath)
-        # Feed base work dir cleaning
-        l_base_path= 'tmp_feed_*'
-        if os.path.exists(l_base_path):
-            shutil.rmtree(l_base_path)
+        
+        
         # Subscan data grouping
         for l_subscan in self.m_subscans:
             l_file_name= ''
@@ -259,114 +249,73 @@ class Fitslike_handler():
                         continue
                 # Prepare on off group keys hirearchy
                 if l_feed not in self.m_group_on_off_cal.keys():
-                    self.m_group_on_off_cal[l_feed]={}
-                # Work dir creation per feed
-                l_base_path= 'tmp_feed_{}/'.format(l_feed)
-                if not os.path.exists(l_base_path):
-                    os.mkdir(l_base_path)
+                    self.m_group_on_off_cal[l_feed]={}                
                 # Section (l_chx) navigation
                 for l_chx in l_subscan[l_feed]:
                     if 'ch_' not in l_chx:
-                        continue
+                        continue                   
                     l_chObj= l_subscan[l_feed][l_chx]
-                    # on off group keys hirearchy
+                    # on off group keys hierarchy
                     if l_chx not in self.m_group_on_off_cal[l_feed].keys():
                         # replicate section data to group on off cal to retrieve them easely
-                        self.m_group_on_off_cal[l_feed][l_chx]= l_chObj
-                    # subscan type [not a map]
-                    #if self.m_scanType == 'on_off' or self.m_scanType == 'nod':
-                    l_feed= l_chObj['frontend']['feed']
-                    # split by polarization so we have
-                    # subscan - feed - ch_x(section) - pol ( L R Q U )
-                    # pol navigation
-                    if 'groups' not in l_chObj.keys():
+                        self.m_group_on_off_cal[l_feed][l_chx]= l_chObj            
+                    l_feed= l_chObj['frontend']['feed']                    
+                    if 'pol_tables_dict' not in l_chObj.keys():
                         continue
-                    l_grouped_pol= l_chObj['groups'].group_by(['pol'])
-                    for group in l_grouped_pol.groups:
-                        # Find pol
-                        l_pol= _getGroupPol(group)
-                        # grouping or not ( Raw Mode, every entr is on )
-                        if self.m_raw:
-                            # on off group keys hirearchy
-                            # list per feed ch_x setup
-                            # Astropy fits table on disk creation, this table is a temp table to work
-                            # subscan data with the goal of reducing RAM usage and improve computation
-                            # stability with big input data
-                            #l_onOffdict= {
-                            #    'on': [], 'off': [],'cal_on':[], 'cal_off': []
-                            #}
+                    l_pol_tables_dict= l_chObj['pol_tables_dict']
+                    if 'pols' not in self.m_group_on_off_cal[l_feed][l_chx].keys():                        
+                        self.m_group_on_off_cal[l_feed][l_chx]['pols']={}
+                    l_pols_dict= self.m_group_on_off_cal[l_feed][l_chx]['pols']
+                    for l_pol in l_pol_tables_dict.keys():                                                    
+                        if l_pol not in l_pols_dict.keys():
+                            l_pols_dict[l_pol]= {'signal': [],'reference': [],'cal_on':[],'cal_off': []}
+                        try:
+                            l_pol_table= QTable.read(l_pol_tables_dict[l_pol], memmap= True)
+                            # ID data type by columns, creating a list made by
+                            if 'cal_on' in l_pol_table.colnames:
+                                l_pols_dict[l_pol]['cal_on'].append(l_pol_tables_dict[l_pol])
+                            elif 'cal_off' in l_pol_table.colnames:
+                                l_pols_dict[l_pol]['cal_off'].append(l_pol_tables_dict[l_pol])
+                            elif 'signal' in l_pol_table.colnames:
+                                l_pols_dict[l_pol]['signal'].append(l_pol_tables_dict[l_pol])
+                            elif 'reference' in l_pol_table.colnames:
+                                l_pols_dict[l_pol]['reference'].append(l_pol_tables_dict[l_pol])
+                        except Exception as e:
+                            self.m_logger.error("{}-{}-{}-reading disk table exception : {}".format(l_feed, l_chx, l_pol,str(e)))                        
+        
+        # Feed base work dir cleaning
+        l_group_path= os.path.join(self.m_outputPath, 'fits_groups')
+        if os.path.exists(l_group_path):
+            shutil.rmtree(l_group_path)
+        os.mkdir(l_group_path)
+        # Join tables from on off group
+        for l_feed in self.m_group_on_off_cal.keys():
+            for l_section in self.m_group_on_off_cal[l_feed].keys():
+                if 'ch_' not in l_section:
+                    continue
+                 # Work dir creation per feed
+                l_this_group_path= os.path.join(l_group_path, 'group_feed_{}'.format(l_feed))
+                if not os.path.exists(l_this_group_path):
+                    os.mkdir(l_this_group_path)
+                for l_pol in self.m_group_on_off_cal[l_feed][l_section]['pols'].keys():
+                    # Join by pol and cal signal
+                    for l_type in self.m_group_on_off_cal[l_feed][l_section]['pols'][l_pol].keys():
+                        try:               
+                            l_table_files= self.m_group_on_off_cal[l_feed][l_section]['pols'][l_pol][l_type]  
+                            if not l_table_files:
+                                continue
+                            if len(l_table_files)==0:
+                                continue                            
+                            l_opened_tables= [QTable.read(t, memmap= True) for t in l_table_files]
+                            joined= vstack(l_opened_tables)
+                            l_fname= "{}_{}_{}_{}.fits".format(l_feed, l_section, l_pol, l_type)
+                            l_table_path= os.path.join(l_this_group_path, l_fname)
+                            joined.write(l_table_path)
+                        except Exception as e:
+                            self.m_logger.error("{}-{}-{}-{} error writing group table on disk : {}".format(l_feed, l_section, l_pol, l_type, str(e)))
+                        
                             
-                            l_onOffdict= {
-                                'on': l_base_path + "section_{}_pol_{}_on.fits".format(l_chx, l_pol),
-                                'off': l_base_path + "section_{}_pol_{}_off.fits".format(l_chx, l_pol),
-                                'cal_on':l_base_path + "section_{}_pol_{}_cal_on.fits".format(l_chx, l_pol),
-                                'cal_off': l_base_path + "section_{}_pol_{}_cal_off.fits".format(l_chx, l_pol)
-                            }
-                            
-                            #pdb.set_trace()
-                            if l_pol not in self.m_group_on_off_cal[l_feed][l_chx].keys():
-                                self.m_group_on_off_cal[l_feed][l_chx][l_pol]= l_onOffdict
-                            try:
-                                # Converting qtable to fits table and join existing table
-                                # Reading on disk QTable and append to astropy fits table
-                                # through conversion                                
-                                #l_stack_path= l_base_path + "section_{}_pol_{}_{}.fits".format(l_chx, l_pol, l_file_name)
- #                               self.m_group_on_off_cal[l_feed][l_chx][l_pol]['on'].append(l_stack_path)                                
-                                l_disk_table= QTable()
-                                if os.path.exists(l_stack_path):
-                                    
-                                    # TODO 
-                                    #l_disk_table= QTable.read(l_stack_path)
-                                    #l_disk_table= vstack([l_disk_table, group])
-                                    #l_disk_table.write(l_stack_path, overwrite= True)
-                                    self.m_logger.info('Overw. existing table {}'.format(l_stack_path))
-                                else:
-                                    self.m_logger.info('Creating new table {}'.format(l_stack_path))
-                                    l_disk_table= QTable(group)
-                                    l_disk_table.write(l_stack_path)
-                            except Exception as e:
-                                self.m_logger.error("{}-{}-{}-on table stacking exception : {}".format(l_feed, l_chx, l_pol,str(e)))
-                        else:
-                            l_onOffdict= {
-                                'on': QTable(), 'off':QTable(),'cal_on':QTable(), 'cal_off':QTable()
-                                }
-                            # scanning joined table group
-                            # cal on off for table group
-                            l_isCal= _is_cal(l_chObj, group)
-                            l_isOn= _is_on(l_chObj)
-                            # on off group keys hirearchy
-                            if l_pol not in self.m_group_on_off_cal[l_feed][l_chx].keys():
-                                self.m_group_on_off_cal[l_feed][l_chx][l_pol]= l_onOffdict
-                            # Grouping feed sub scans on off cal on off
-                            if l_isOn and not l_isCal: # ON group
-                                l_on= self.m_group_on_off_cal[l_feed][l_chx][l_pol]['on']
-                                try:
-                                    self.m_group_on_off_cal[l_feed][l_chx][l_pol]['on']= vstack([l_on, group])
-                                except Exception as e:
-                                    self.m_logger.error("{}-{}-{}-on table stacking exception : {}".format(l_feed, l_chx, l_pol,str(e)))
-                                self.m_logger.info('feed ' + str(l_feed) + ' ' + l_chx + ' is on ')
-
-                            elif not l_isOn and not l_isCal:  # OFF group
-                                l_off= self.m_group_on_off_cal[l_feed][l_chx][l_pol]['off']
-                                try:
-                                    self.m_group_on_off_cal[l_feed][l_chx][l_pol]['off']= vstack([l_off, group])
-                                except Exception as e:
-                                    self.m_logger.error("{}-{}-{}-off table stacking exception : {}".format(l_feed, l_chx, l_pol,str(e)))
-                                self.m_logger.info('feed ' + str(l_feed) + ' ' + l_chx + ' is off ')
-                            elif l_isOn and  l_isCal: # CAL ON group
-                                l_calon= self.m_group_on_off_cal[l_feed][l_chx][l_pol]['cal_on']
-                                try:
-                                    self.m_group_on_off_cal[l_feed][l_chx][l_pol]['cal_on']= vstack([l_calon, group])
-                                except Exception as e:
-                                    self.m_logger.error("{}-{}-{}-cal_on table stacking exception : {}".format(l_feed, l_chx, l_pol,str(e)))
-                                self.m_logger.info('feed ' + str(l_feed) + ' ' + l_chx + ' is cal on ')
-                            elif not l_isOn and  l_isCal: # CAL OFF group
-                                l_caloff= self.m_group_on_off_cal[l_feed][l_chx][l_pol]['cal_off']
-                                try:
-                                    self.m_group_on_off_cal[l_feed][l_chx][l_pol]['cal_off']= vstack([l_caloff, group])
-                                except Exception as e:
-                                    self.m_logger.error("{}-{}-{}-cal_off table stacking exception : {}".format(l_feed, l_chx, l_pol,str(e)))
-                                self.m_logger.info('feed ' + str(l_feed) + ' ' + l_chx + ' is cal off ')
+        
 
 
     def normalize(self):
@@ -523,11 +472,11 @@ class Fitslike_handler():
         """
 
         def getQTableColWithUnit(p_table, p_col, p_unit):
-            """ Get QTable[col_u_unit] data adding unit to returned data """            
+            """ Get QTable[col_u_unit] data adding unit to returned data """
             l_col_names= p_table.colnames
             for col_name in l_col_names:
                 if p_col in col_name:
-                    l_field_unit= col_name.split('_u_')                    
+                    l_field_unit= col_name.split('_u_')
                     if len(l_field_unit) == 2:
                         data= p_table[col_name] * unit.Unit(l_field_unit[1])
                         data= data.to(p_unit).value
@@ -652,7 +601,7 @@ class Fitslike_handler():
                                     l_class_data[k]= np.full((rows,), l_value)
                                 except Exception  as e :
                                     self.m_logger.error("Error reshaping classfits data: " +str(e))
-                            # Transform dictionary based converted table in QTable on disk                            
+                            # Transform dictionary based converted table in QTable on disk
                             l_class_table= QTable()
                             for col in l_class_data.keys():
                                 try:
@@ -665,13 +614,13 @@ class Fitslike_handler():
                             l_class_path= l_splitted_path[0].replace('.','_')+'_class.fits'
                             self.m_logger.info("input table path: {}".format(l_pol_table_path))
                             self.m_logger.info("class table path: {}".format(l_class_path))
-                            try:                                
+                            try:
                                 l_class_table.write(l_class_path)
-                            except ValueError as e:                                
+                            except ValueError as e:
                                 self.m_logger.error("-------- ERROR begin--------")
                                 traceback.print_stack()
                                 self.m_logger.error("Error writing small classfit table to disk {}".format(e))
-                                self.m_logger.error("-------- ERROR end--------")                                
+                                self.m_logger.error("-------- ERROR end--------")
                             classfits.append(l_class_path)
                         except TypeError as e:
                             traceback.print_exc()

@@ -843,9 +843,9 @@ class Awarness_fitszilla():
                             self.m_logger.error("Missing polarization label! skip table")
                     # Keep trace of on disk tables
                     l_chx['pol_tables_dict']= l_pols
+                    self.m_logger.info(l_chx['pol_tables_dict'])
                     # Remove unesfull data on fits representation
                     del l_chx['groups_by_pol']                    
-                        
 
                 else: # SPECTRUM OR SINGLE POL
                     " manage pwr spectrum "
@@ -898,7 +898,7 @@ class Awarness_fitszilla():
                 del l_coo["data_dec"]
                 del l_chx['extras']['weather']
                 del l_spec["data"]
-                del l_spec["flag_cal"]
+                del l_spec["flag_cal"]                              
 
     def _writeTableToFile(self, p_table, p_feed, p_section, p_pol) -> str:
         """
