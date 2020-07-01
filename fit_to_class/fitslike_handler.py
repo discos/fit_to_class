@@ -228,8 +228,8 @@ class Fitslike_handler():
         self.m_subscans= sorted(self.m_subscans,\
                                 key= lambda item:('file_name' not in item, item.get('file_name', None)))
 
-        
-        
+
+
         # Subscan data grouping
         for l_subscan in self.m_subscans:
             l_file_name= ''
@@ -249,24 +249,24 @@ class Fitslike_handler():
                         continue
                 # Prepare on off group keys hirearchy
                 if l_feed not in self.m_group_on_off_cal.keys():
-                    self.m_group_on_off_cal[l_feed]={}                
+                    self.m_group_on_off_cal[l_feed]={}
                 # Section (l_chx) navigation
                 for l_chx in l_subscan[l_feed]:
                     if 'ch_' not in l_chx:
-                        continue                   
+                        continue
                     l_chObj= l_subscan[l_feed][l_chx]
                     # on off group keys hierarchy
                     if l_chx not in self.m_group_on_off_cal[l_feed].keys():
                         # replicate section data to group on off cal to retrieve them easely
-                        self.m_group_on_off_cal[l_feed][l_chx]= l_chObj            
-                    l_feed= l_chObj['frontend']['feed']                    
+                        self.m_group_on_off_cal[l_feed][l_chx]= l_chObj
+                    l_feed= l_chObj['frontend']['feed']
                     if 'pol_tables_dict' not in l_chObj.keys():
                         continue
                     l_pol_tables_dict= l_chObj['pol_tables_dict']
-                    if 'pols' not in self.m_group_on_off_cal[l_feed][l_chx].keys():                        
+                    if 'pols' not in self.m_group_on_off_cal[l_feed][l_chx].keys():
                         self.m_group_on_off_cal[l_feed][l_chx]['pols']={}
                     l_pols_dict= self.m_group_on_off_cal[l_feed][l_chx]['pols']
-                    for l_pol in l_pol_tables_dict.keys():                                                    
+                    for l_pol in l_pol_tables_dict.keys():
                         if l_pol not in l_pols_dict.keys():
                             l_pols_dict[l_pol]= {'signal': [],'reference': [],'cal_on':[],'cal_off': []}
                         try:
@@ -281,8 +281,8 @@ class Fitslike_handler():
                             elif 'reference' in l_pol_table.colnames:
                                 l_pols_dict[l_pol]['reference'].append(l_pol_tables_dict[l_pol])
                         except Exception as e:
-                            self.m_logger.error("{}-{}-{}-reading disk table exception : {}".format(l_feed, l_chx, l_pol,str(e)))                        
-        
+                            self.m_logger.error("{}-{}-{}-reading disk table exception : {}".format(l_feed, l_chx, l_pol,str(e)))
+
         # Feed base work dir cleaning
         l_group_path= os.path.join(self.m_outputPath, 'fits_groups')
         if os.path.exists(l_group_path):
@@ -300,22 +300,22 @@ class Fitslike_handler():
                 for l_pol in self.m_group_on_off_cal[l_feed][l_section]['pols'].keys():
                     # Join by pol and cal signal
                     for l_type in self.m_group_on_off_cal[l_feed][l_section]['pols'][l_pol].keys():
-                        try:               
-                            l_table_files= self.m_group_on_off_cal[l_feed][l_section]['pols'][l_pol][l_type]  
+                        try:
+                            l_table_files= self.m_group_on_off_cal[l_feed][l_section]['pols'][l_pol][l_type]
                             if not l_table_files:
                                 continue
                             if len(l_table_files)==0:
-                                continue                            
+                                continue
                             l_opened_tables= [QTable.read(t, memmap= True) for t in l_table_files]
                             joined= vstack(l_opened_tables)
                             l_fname= "{}_{}_{}_{}.fits".format(l_feed, l_section, l_pol, l_type)
                             l_table_path= os.path.join(l_this_group_path, l_fname)
+                            self.m_group_on_off_cal[l_feed][l_section]['pols'][l_pol][l_type]= l_table_path
                             joined.write(l_table_path)
+                            self.m_logger.info("{}_{}_{}_{}".format(l_feed, l_section, l_pol, l_type))
+                            self.m_logger.info("Grouping table into {}".format(l_table_path))
                         except Exception as e:
                             self.m_logger.error("{}-{}-{}-{} error writing group table on disk : {}".format(l_feed, l_section, l_pol, l_type, str(e)))
-                        
-                            
-        
 
 
     def normalize(self):
@@ -346,6 +346,11 @@ class Fitslike_handler():
 
             normalized= on * calibrationFactor
 
+        If cal_on/cal_off are missing or off are missing simply it skips calculations,
+        and provides only signal data table to:
+            - output_path/fits_normalized
+        Data output will be grouped by feed_sectiìon_pol
+
         """
 
         def _tableToDict(p_table) -> dict:
@@ -354,7 +359,10 @@ class Fitslike_handler():
             Gets unit from column names _u_unit
             """
             "  "
-            l_out={}
+            l_out= {}
+            if len(p_table) == 0:
+                self.m_logger.error("Empty table..why?")
+                return l_out
             for field in p_table.colnames:
                 splits= field.split('_u_')
                 if len(splits) > 1:
@@ -364,110 +372,149 @@ class Fitslike_handler():
                     try:
                         l_out[field]= p_table[field].data.data
                     except TypeError:
-                        " cannot mean strings"
+                        # Cannot average strings
                         l_out[field]= p_table[field][0]
             return l_out
 
 
+        # Norm output dir creation
+        l_norm_path= os.path.join(self.m_outputPath, 'fits_normalized')
+        if os.path.exists(l_norm_path):
+            shutil.rmtree(l_norm_path)
+        os.mkdir(l_norm_path)
+        # Feed traverse
         for l_feed in self.m_group_on_off_cal.keys():
             # Work only selected feed, or All
             if self.m_feed:
                 if self.m_feed not in str(l_feed):
                     continue
+            # Feed folder
+            l_feed_path= os.path.join(l_norm_path, 'normalized_feed_{}'.format(l_feed))
+            if not os.path.exists(l_feed_path):
+                os.mkdir(l_feed_path)
+            # Section traverse
             for ch in self.m_group_on_off_cal[l_feed].keys():
                 l_section= self.m_group_on_off_cal[l_feed][ch]
+                l_section_pols= self.m_group_on_off_cal[l_feed][ch]['pols']
                 for pol in ['LL', 'RR', 'LR', 'RL']:
-                    if pol not in l_section.keys(): continue
-                    " get calibration mark temperature if available "
+                    l_calMarkTemp= None
+                    if pol not in l_section_pols.keys(): continue
+                    # Get calibration mark temperature if available
                     try:
                         l_calMarkTemp= l_section['frontend']['cal_mark_temp']
                     except:
-                        self.m_logger.warning("[{}][{}][{}]['on'] is empty (why?)".format(l_feed,ch,pol))
-                        continue
-                    " Here i have feed - section - pol - on/off/cals "
-                    " i want to decompose table group to a dictionary "
-                    for group in l_section[pol].keys():
-                        self.m_group_on_off_cal[l_feed][ch][pol][group]= _tableToDict(l_section[pol][group])
-                    l_polarization= self.m_group_on_off_cal[l_feed][ch][pol]
-                    " flag can calibrate "
-                    can_calibrate= True
-                    " Avg off "
-                    #l_offAvgData= []
-                    try:
-                        l_offAvg= np.mean(l_polarization['off']['data'], axis= 0)
-                    except KeyError:
-                        self.m_logger.warning(" off not present in {}-{}-{}".format(l_feed,ch,pol))
-                        can_calibrate= False
-                    " Avg call on "
-                    l_calOnAvg= None
-                    try:
-                        if l_polarization['cal_on']['data'].shape[0] :
-                            l_calOnAvg= np.mean(l_polarization['cal_on']['data'], axis= 0)
-                            l_calOnAvg= (l_calOnAvg - l_offAvg) / l_offAvg
-                    except KeyError :
-                        self.m_logger.warning(" cal_on not present in {}-{}-{}".format(l_feed,ch,pol))
-                        can_calibrate= False
-                    " Avg cal off "
-                    l_calOffAvg= None
-                    try:
-                        if l_polarization['cal_off']['data'].shape[0]:
-                            l_calOffAvg= np.mean(l_polarization['cal_off']['data'], axis= 0)
-                            l_calOffAvg = (l_calOffAvg - l_offAvg) / l_offAvg
-                    except KeyError:
-                        self.m_logger.warning(" cal_off not present in {}-{}-{}".format(l_feed,ch,pol))
-                        can_calibrate= False
-                    " On - Off "
-                    on_off= []
-                    try:
-                        for elOn in l_polarization['on']['data']:
-                            on_off.append( (elOn - l_offAvg)/l_offAvg )
-                    except:
-                        self.m_logger.warning(" ON data not present in {}-{}-{}".format(l_feed,ch,pol))
-                        can_calibrate= False
-                    " adding on_off list to section "
-                    l_polarization['on_off']= on_off
-                    self.m_group_on_off_cal[l_feed][ch][pol]['on_off']= np.array(on_off)
-                    " Rescale with cal mark temp "
-                    " average non lienarity from receiver at differents power input levels "
-                    if not can_calibrate:
-                        self.m_logger.error("Cannot calibrate without cal_on, cal_off data ")
-                        continue
-                    cal = np.concatenate((l_calOnAvg, l_calOffAvg))
-                    try:
-                        if len(cal) == 0:
+                        self.m_logger.warning("[{}][{}][{}] no cal mark temp available".format(l_feed, ch, pol))
+
+                    # Here i have feed - section - pol - on/off/cals
+                    # Read tables on off cal_on cal_off
+                    l_opened_tables={
+                        'signal': None,
+                        'reference' : None,
+                        'cal_on': None,
+                        'cal_off': None
+                        }
+                    l_data={
+                        'signal': QTable(),
+                        'reference' : QTable(),
+                        'cal_on': QTable(),
+                        'cal_off': QTable()
+                        }
+                    for on_off_cal in l_opened_tables.keys():
+                        if on_off_cal not in l_section_pols[pol].keys():
                             continue
-                        good =  ~np.isnan(cal) & ~np.isinf(cal)
-                        cal = cal[good]
-                        if len(cal) > 0:
-                            meancal = np.median(cal) if len(cal) > 30 else np.mean(cal)
+                        try:
+                            l_table_path= l_section_pols[pol][on_off_cal]
+                            l_opened_tables[on_off_cal]= QTable.read(l_table_path, memmap= True)
+                        except Exception as e:
+                            self.m_logger.warning("[{}][{}][{}][{}]".format(l_feed, ch, pol, on_off_cal))
+                            self.m_logger.error("Error reading goruped table {} - {}".format(l_table_path, e))
+
+                    # Now i've loaded all the tables needed to calibrate one section
+                    # Processing reference mean
+                    try:
+                        if l_opened_tables['reference'] != None:
+                            l_opened_tables['reference']= l_opened_tables['cal_on'].group_by(['pol']).groups.aggregate(np.mean)
+                            l_data['reference']= l_opened_tables['reference']['data']
+                        # Processing cal_on mean
+                        if l_opened_tables['cal_on'] != None and l_opened_tables['reference'] != None:
+                            l_opened_tables['cal_on']= l_opened_tables['cal_on'].group_by(['pol']).groups.aggregate(np.mean)
+                            l_data['cal_on']= l_opened_tables['cal_on']['data']
+                        # Processing cal_off mean
+                        if l_opened_tables['cal_off'] != None and l_opened_tables['reference'] != None:
+                            l_opened_tables['cal_off']= l_opened_tables['cal_off'].group_by(['pol']).groups.aggregate(np.mean)
+                            l_data['cal_off']= l_opened_tables['cal_off']['data']
+                        # Signal whole data set
+                        l_data['signal']= l_opened_tables['signal']['data']
+                    except KeyError as e:
+                        self.m_logger.warning("[{}][{}][{}]".format(l_feed,ch,pol))
+                        self.m_logger.error("Missing mandatory keyword {}".format(e))
+                    except Exception as e:
+                        self.m_logger.warning("[{}][{}][{}]".format(l_feed,ch,pol))
+                        self.m_logger.error("Exception averaging grouped table {}".format(e))
+
+                    # Have we data?
+                    l_data_raw= False
+                    l_on_off_possible = False
+                    l_calibration_possible= False
+                    if len(l_data['signal']) != 0:
+                        l_data_raw= True
+                        # Sub calculations, on - off
+                        if len(l_data['reference']) and len(l_data['signal']):
+                            l_on_off_possible = True
+                            # Check if calculations are possible
+                            l_calibration_possible= False
+                            if l_calMarkTemp:
+                                if len(l_data['cal_on']) and len(l_data['cal_off']):
+                                    l_calibration_possible= True
+                    #
+                    if not l_data_raw:
+                        self.m_logger.critical("Missing input data!")
+                        sys.exit(0)                    
+                    self.m_logger.warning("[{}][{}][{}] Applying calibration".format(l_feed,ch,pol))
+                    # Calc with units
+                    if l_on_off_possible:
+                        l_signal= l_data['signal']                        
+                        l_reference= l_data['reference']
+                        l_data['on_off']= (l_signal -l_reference) / l_reference
+                        # TODO write data to disk table instead of section dict
+                        l_section_pols[pol]['data_on_off']= l_data['on_off']
+                        
+                    if l_calibration_possible:
+                        l_cal = np.concatenate((l_data['cal_on'], l_data['cal_off']))
+                    try:
+                        if len(l_cal) == 0:
+                            continue
+                        good =  ~np.isnan(l_cal) & ~np.isinf(l_cal)
+                        l_cal = l_cal[good]
+                        if len(l_cal) > 0:
+                            meancal = np.median(l_cal) if len(l_cal) > 30 else np.mean(l_cal)
                             calibration_factor = 1 / meancal * l_calMarkTemp
                         else:
                             continue
-                        " Calibrated spectrum added to chx "
-                        calibrated=[]
-                        for elOnOff in l_polarization['on_off']:
-                            calibrated.append(elOnOff * calibration_factor)
-                        " adding calibrated data to section"
-                        self.m_group_on_off_cal[l_feed][ch][pol]['calibrated']= np.array(calibrated)
+                        l_data['calibrated']= l_data['on_off'] * calibration_factor                         
+                        # TODO write data to disk table instead of section dict
+                        l_section_pols[pol]['data_calibrated']= l_data['calibrated']
+                                                    
                     except Exception as e:
-                        traceback.print_exc()
                         self.m_no_cal= True
-                        self.m_logger.error("Cannot apply calibration to this data set")
-                        self.m_logger.error(str(e))
+                        self.m_logger.warning("[{}][{}][{}]".format(l_feed,ch,pol))
+                        self.m_logger.error("Cannot apply calibration to this data set {}".format(e))
+                        
 
     def ClassFitsAdaptations(self):
         """
-        Generazione struttura dati secondo la definizione del classfist
+        Raw data groups stored as :
+            self.m_group_on_off_cal[l_feed][l_section]['pols'][LL LR RL RR][on off cal_on cal off]
 
-        data in group on off cal sono divisi per
-        self.m_group_on_off_cal['ch_0']['on'][0].keys()
+        On disk we have a folder relative to oputput path:
+            output_path/fits_groups, folder where table data (disk part) are grouped by feed section pol on off cal
+            output_path/fits_norms, folder where grouped data produce a calibrated measures ( if cal is present, counts otherwise )
+            output_path/classfits, single, calibrated classfits file boxing every feed and pol
 
-        info base
+        Conversion tips:
+             desired cooord in az, el o ra, dec
+            observed coord in crdelt2,3
 
-        coordinate comandate in az, el o ra, dec
-        coordinate osservate in crdelt2,3
-        spettri separati per polarizzazione e per feed
-        un file per ogni uno
 
         """
 
@@ -483,7 +530,6 @@ class Fitslike_handler():
                         return data
 
 
-
         for l_feed in self.m_group_on_off_cal:
             # Feed filter added by user ?
             if self.m_feed:
@@ -492,12 +538,16 @@ class Fitslike_handler():
                     continue
             classfits= []
             for l_ch in self.m_group_on_off_cal[l_feed]:
-                " navigating polarizations "
-                l_chx= self.m_group_on_off_cal[l_feed][l_ch]
+                l_chx= self.m_group_on_off_cal[l_feed][l_ch]['pol']
                 for pol in ['LL', 'RR', 'LR', 'RL']:
-                    if pol not in self.m_group_on_off_cal[l_feed][l_ch].keys(): continue
-                    # We work starting from 'on' data set
-                    l_table_list= self.m_group_on_off_cal[l_feed][l_ch][pol]['on']
+                    if pol not in l_chx.keys(): continue
+                    # TODO continuare la review:
+                    # serve un punto di partenza comune per convertire i dati
+                    # la normalizzazione avviene sempre, nel caso non abbia
+                    # i riferimenti di calcolo cmq mi produce in uscita una ref
+                    # ai dati ed alle tables da utilizzare
+                    # Quali?
+                    l_table_list= [l_chx]['on']
                     # For every pol it reads related disk Table
                     for l_pol_table_path in l_table_list:
                         l_polarization_table= QTable.read(l_pol_table_path)
