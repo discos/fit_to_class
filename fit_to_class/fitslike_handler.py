@@ -309,14 +309,21 @@ class Fitslike_handler():
                             l_opened_tables= [QTable.read(t, memmap= True) for t in l_table_files]
                             joined= vstack(l_opened_tables)
                             l_fname= "{}_{}_{}_{}.fits".format(l_feed, l_section, l_pol, l_type)
-                            l_table_path= os.path.join(l_this_group_path, l_fname)
-                            self.m_group_on_off_cal[l_feed][l_section]['pols'][l_pol][l_type]= l_table_path
-                            joined.write(l_table_path)
+                            l_gr_table_path= os.path.join(l_this_group_path, l_fname)
+                            self.m_group_on_off_cal[l_feed][l_section]['pols'][l_pol][l_type]= l_gr_table_path
+                            joined.write(l_gr_table_path)
+                            # Deleting input tables
+                            for input_file in l_table_files:
+                                try:
+                                    os.remove(input_file)
+                                except IOError as e:
+                                    self.m_logger.error("Can't delete intermediate file {} : {}".format(input_file, e))
                             self.m_logger.info("{}_{}_{}_{}".format(l_feed, l_section, l_pol, l_type))
-                            self.m_logger.info("Grouping table into {}".format(l_table_path))
+                            self.m_logger.info("Grouping table into {}".format(l_gr_table_path))
                         except Exception as e:
                             self.m_logger.error("{}-{}-{}-{} error writing group table on disk : {}".format(l_feed, l_section, l_pol, l_type, str(e)))
-
+        # Deleting intermediate folder
+                
 
     def normalize(self):
         """
@@ -388,6 +395,9 @@ class Fitslike_handler():
             if self.m_feed:
                 if self.m_feed not in str(l_feed):
                     continue
+            
+            if not str(l_feed).isdigit():
+                continue
             # Feed folder
             l_feed_path= os.path.join(l_norm_path, 'normalized_feed_{}'.format(l_feed))
             if not os.path.exists(l_feed_path):
@@ -433,7 +443,7 @@ class Fitslike_handler():
                     # Processing reference mean
                     try:
                         if l_opened_tables['reference'] != None:
-                            l_opened_tables['reference']= l_opened_tables['cal_on'].group_by(['pol']).groups.aggregate(np.mean)
+                            l_opened_tables['reference']= l_opened_tables['reference'].group_by(['pol']).groups.aggregate(np.mean)
                             l_data['reference']= l_opened_tables['reference']['data']
                         # Processing cal_on mean
                         if l_opened_tables['cal_on'] != None and l_opened_tables['reference'] != None:
@@ -459,9 +469,10 @@ class Fitslike_handler():
                     if len(l_data['signal']) != 0:
                         l_data_raw= True
                         # Sub calculations, on - off
-                        if len(l_data['reference']) and len(l_data['signal']):
-                            l_on_off_possible = True
+                        if len(l_data['reference']) and len(l_data['signal']):                            
                             # Check if calculations are possible
+                            # TODO implementare solo conteggi senzi cal
+                            l_on_off_possible= True
                             l_calibration_possible= False
                             if l_calMarkTemp:
                                 if len(l_data['cal_on']) and len(l_data['cal_off']):
@@ -471,36 +482,76 @@ class Fitslike_handler():
                         self.m_logger.critical("Missing input data!")
                         sys.exit(0)                    
                     self.m_logger.warning("[{}][{}][{}] Applying calibration".format(l_feed,ch,pol))
-                    # Calc with units
-                    if l_on_off_possible:
-                        l_signal= l_data['signal']                        
-                        l_reference= l_data['reference']
-                        l_data['on_off']= (l_signal -l_reference) / l_reference
-                        # TODO write data to disk table instead of section dict
-                        l_section_pols[pol]['data_on_off']= l_data['on_off']
-                        
-                    if l_calibration_possible:
-                        l_cal = np.concatenate((l_data['cal_on'], l_data['cal_off']))
-                    try:
-                        if len(l_cal) == 0:
-                            continue
-                        good =  ~np.isnan(l_cal) & ~np.isinf(l_cal)
-                        l_cal = l_cal[good]
-                        if len(l_cal) > 0:
-                            meancal = np.median(l_cal) if len(l_cal) > 30 else np.mean(l_cal)
-                            calibration_factor = 1 / meancal * l_calMarkTemp
+                    # TODO subs signal table with calibrated data
+                    # Calc with units..review
+                    # Keep data as small as possible (numpy.float32)
+                    try:                        
+                        if l_calibration_possible:
+                            # Complete calibration
+                            # On Off
+                            l_signal= l_data['signal']
+                            l_reference= l_data['reference']
+                            l_data['on_off']= (l_signal -l_reference) / l_reference                            
+                            # Calibration factor
+                            l_cal = np.concatenate((l_data['cal_on'], l_data['cal_off']))                            
+                            if len(l_cal) == 0:
+                                continue
+                            good =  ~np.isnan(l_cal) & ~np.isinf(l_cal)
+                            l_cal = l_cal[good]                            
+                            if len(l_cal) > 0:
+                                meancal = np.median(l_cal) if len(l_cal) > 30 else np.mean(l_cal)
+                                calibration_factor = 1 / meancal * l_calMarkTemp             
+                                calibration_factor= np.float32(calibration_factor.value)* calibration_factor.unit
+                            else:
+                                continue                              
+                            l_data['calibrated']= l_data['on_off'].astype(np.float32) * calibration_factor                    
+                            # Replace data on table                             
+                            l_opened_tables['signal']['data']= l_data['calibrated']
+                            # Remove useless columns
+                            if 'signal' in l_opened_tables['signal'].colnames:
+                                del l_opened_tables['signal']['signal']                            
+                            # Rewrite table on disk, overwriting signal table
+                            l_file_name= "{}_{}_{}_calibrated.fits".format(l_feed, ch, pol)
+                            l_file_path= os.path.join(l_feed_path , l_file_name)                                   
+                            l_section_pols[pol]['calibrated']= l_file_path
+                            l_opened_tables['signal'].write(l_file_path, overwrite= True)                                                        
+                        elif l_on_off_possible:
+                            # Only counts
+                            l_signal= l_data['signal']
+                            l_reference= l_data['reference']
+                            l_data['on_off']= (l_signal -l_reference) / l_reference                            
+                            l_opened_tables['signal']['data']= l_data['on_off']
+                            # Remove useless columns
+                            if 'signal' in l_opened_tables['signal'].colnames:
+                                del l_opened_tables['signal']['signal']                
+                            # Writing to disk 
+                            l_file_name= "{}_{}_{}_counts.fits".format(l_feed, ch, pol)
+                            l_file_path= os.path.join(l_feed_path , l_file_name)                            
+                            l_section_pols[pol]['counts']= l_file_path
+                            l_opened_tables['signal'].write(l_file_path, overwrite= True)    
+                        elif len(l_opened_tables['signal']): 
+                            # Signal with no calculations                                                                                
+                            # Remove useless columns
+                            if 'signal' in l_opened_tables['signal'].colnames:
+                                del l_opened_tables['signal']['signal']                
+                            # Writing to disk 
+                            l_file_name= "{}_{}_{}_signal.fits".format(l_feed, ch, pol)
+                            l_file_path= os.path.join(l_feed_path , l_file_name)                            
+                            l_section_pols[pol]['signal']= l_file_path
+                            l_opened_tables['signal'].write(l_file_path, overwrite= True)    
                         else:
-                            continue
-                        l_data['calibrated']= l_data['on_off'] * calibration_factor                         
-                        # TODO write data to disk table instead of section dict
-                        l_section_pols[pol]['data_calibrated']= l_data['calibrated']
-                                                    
+                            # Nothing to do..
+                            self.m_no_cal= True
+                            self.m_logger.error("[{}][{}][{}] No appropriate data to normalize this dataset".format(l_feed, ch, pol))   
+                        # Write data
+                    except IOError as e:
+                        self.m_no_cal= True                        
+                        self.m_logger.error("[{}][{}][{}] Exception applying calibration to this data set : {}".format(l_feed,ch,pol,e))                           
                     except Exception as e:
-                        self.m_no_cal= True
-                        self.m_logger.warning("[{}][{}][{}]".format(l_feed,ch,pol))
-                        self.m_logger.error("Cannot apply calibration to this data set {}".format(e))
+                        self.m_no_cal= True                    
+                        self.m_logger.error("[{}][{}][{}] Exception applying calibration to this data set : {}".format(l_feed,ch,pol,e))   
                         
-
+                    
     def ClassFitsAdaptations(self):
         """
         Raw data groups stored as :
@@ -529,155 +580,172 @@ class Fitslike_handler():
                         data= data.to(p_unit).value
                         return data
 
-
+        # Work folder
+        l_work_folder= os.path.join(self.m_outputPath, 'classfits')
+        if os.path.exists(l_work_folder):
+            shutil.rmtree(l_work_folder)
+        os.mkdir(l_work_folder)
+        # Feed traverse
         for l_feed in self.m_group_on_off_cal:
             # Feed filter added by user ?
             if self.m_feed:
                 # Check if selected feed is the feed we want to work
                 if self.m_feed not in str(l_feed):
                     continue
+            # Only feed, avoid extra data on this level
+            if not str(l_feed).isdigit():
+                continue
             classfits= []
+            # Feed folder
+            l_feed_path= os.path.join(l_work_folder, 'class_feed_{}'.format(l_feed))
+            if not os.path.exists(l_feed_path):
+                os.mkdir(l_feed_path)
+            # Sections traverse
             for l_ch in self.m_group_on_off_cal[l_feed]:
-                l_chx= self.m_group_on_off_cal[l_feed][l_ch]['pol']
+                l_section= self.m_group_on_off_cal[l_feed][l_ch]
+                l_section_pols= self.m_group_on_off_cal[l_feed][l_ch]['pols']
                 for pol in ['LL', 'RR', 'LR', 'RL']:
-                    if pol not in l_chx.keys(): continue
-                    # TODO continuare la review:
-                    # serve un punto di partenza comune per convertire i dati
-                    # la normalizzazione avviene sempre, nel caso non abbia
-                    # i riferimenti di calcolo cmq mi produce in uscita una ref
-                    # ai dati ed alle tables da utilizzare
-                    # Quali?
-                    l_table_list= [l_chx]['on']
-                    # For every pol it reads related disk Table
-                    for l_pol_table_path in l_table_list:
-                        l_polarization_table= QTable.read(l_pol_table_path)
-                        # Check work on data on only ( Raw Mode )
-                        if self.m_raw:
-                            calibrated_data= None
-                            on_off_data= None
+                    if pol not in l_section_pols.keys(): continue                    
+                    # Check work on data on only ( Raw Mode )                    
+                    calibration_type= ''
+                    l_polarization_table= None                                          
+                    # ONLY 1 table per pol!
+                    try:
+                        # Data retreiving one level up from 'on' data
+                        if 'calibrated' in l_section_pols[pol].keys():
+                            calibrated_data_path= l_section_pols[pol]['calibrated']                                
+                            self.m_logger.info("Loading {}".format(calibrated_data_path))
+                            l_polarization_table= QTable.read(calibrated_data_path, memmap= True)
+                            calibration_type= 'calibrated'
+                        elif 'on_off' in l_section_pols[pol].keys():
+                            on_off_data_table_path= l_section_pols[pol]['on_off']
+                            self.m_logger.info("Loading {}".format(calibrated_data_path))
+                            l_polarization_table= QTable.read(on_off_data_table_path, memmap= True)
+                            calibration_type= 'on_off'
+                        elif 'signal' in l_section_pols[pol].keys():
+                            signal_data_path= l_section_pols[pol]['signal']
+                            self.m_logger.info("Loading {}".format(calibrated_data_path))
+                            l_polarization_table= QTable.read(signal_data_path, memmap= True)
+                            calibration_type= 'signal'
                         else:
-                            # Data retreiving one level up from 'on' data
-                            if 'calibrated' in self.m_group_on_off_cal[l_feed][l_ch][pol].keys():
-                                calibrated_data= self.m_group_on_off_cal[l_feed][l_ch][pol]['calibrated']
-                            else:
-                                calibrated_data= None
-                            if 'on_off' in self.m_group_on_off_cal[l_feed][l_ch][pol].keys():
-                                on_off_data= self.m_group_on_off_cal[l_feed][l_ch][pol]['on_off']
-                            else:
-                                on_off_data= None
-                        #pdb.set_trace()
-                        # Generic observation data copy to dedicated dict, more copies
-                        # below during calculations
-                        self.m_obs_general_data={}
-                        self.m_obs_general_data['ra']= l_chx['scheduled']['ra'].to(unit.deg).value
-                        self.m_obs_general_data['dec']= l_chx['scheduled']['dec'].to(unit.deg).value
-                        self.m_obs_general_data['source']= l_chx['scheduled']['source']
-                        self.m_obs_general_data['date-red']= Time.now().to_datetime().strftime('%d/%m/%y')
-                        # classfits new dict filling process
-                        l_class_data= {}
-                        # ch by ch
+                            self.m_logger.warning("{}_{}_{} No data suitable for class conversion".format(l_feed, l_ch, pol))
+                            continue
+                    except IOError as e:
+                        self.m_logger.error("Exception retrieving normalized data from disk tables {}".format(e))
+                        continue
+                    except Exception as e:
+                        self.m_logger.error("Exception retrieving normalized data from disk tables {}".format(e))
+                        continue
+                    #pdb.set_trace()
+                    # Generic observation data copy to dedicated dict, more copies
+                    # below during calculations
+                    self.m_obs_general_data={}
+                    self.m_obs_general_data['ra']= l_section['scheduled']['ra'].to(unit.deg).value
+                    self.m_obs_general_data['dec']= l_section['scheduled']['dec'].to(unit.deg).value
+                    self.m_obs_general_data['source']= l_section['scheduled']['source']
+                    self.m_obs_general_data['date-red']= Time.now().to_datetime().strftime('%d/%m/%y')
+                    # classfits new dict filling process
+                    l_class_data= {}
+                    # ch by ch
+                    try:
+                        # Data first to get shapes                            
+                        l_class_data['SPECTRUM']= l_polarization_table['data']
+                        # data shape they must be equals ( on_off cal on )
+                        data_shape= l_class_data['SPECTRUM'].shape
+                        l_class_data['CRPIX1']=  l_section['backend']['bins'] // 2 + 1
+                        # Lavoro con i dati integrati
+                        # ut
+                        l_tMjd= l_polarization_table['data_time_mjd']
+                        l_timeMjd= Time(l_tMjd, format='mjd', scale='utc')
+                        l_class_data['UT']= ( l_tMjd - np.floor(l_tMjd)) * 86400
+                        # date
+                        l_class_data['DATE-OBS']= l_timeMjd.strftime('%d/%m/%y')
+                        # lsts
+                        l_lsts= l_timeMjd.sidereal_time('apparent', \
+                                  fitslike_commons.Fitslike_commons.\
+                                      get_site_location(l_section['scheduled']['antenna']).lon)
+                        l_lsts= l_lsts.value * unit.hr
+                        # infos
+                        l_class_data['OBJECT']= l_section['scheduled']['source']
+                        l_class_data['LINE']= "F{}-{:3.3f}-MHz"\
+                            .format(l_section['frontend']['feed'], l_section['backend']['bandwidth'])
+                        self.m_obs_general_data['line']= l_class_data['LINE']
                         try:
-                            # Data first to get shapes
-                            l_class_data['SPECTRUM_RAW']= l_polarization_table['data']
-                            l_class_data['SPECTRUM_ON_OFF']= on_off_data
-                            l_class_data['SPECTRUM_CAL']= calibrated_data
-                            # data shape they must be equals ( on_off cal on )
-                            data_shape= l_class_data['SPECTRUM_RAW'].shape
-                            l_class_data['CRPIX1']=  l_chx['backend']['bins'] // 2 + 1
-                            # Lavoro con i dati integrati
-                            # ut
-                            l_tMjd= l_polarization_table['data_time_mjd']
-                            l_timeMjd= Time(l_tMjd, format='mjd', scale='utc')
-                            l_class_data['UT']= ( l_tMjd - np.floor(l_tMjd)) * 86400
-                            # date
-                            l_class_data['DATE-OBS']= l_timeMjd.strftime('%d/%m/%y')
-                            # lsts
-                            l_lsts= l_timeMjd.sidereal_time('apparent', \
-                                      fitslike_commons.Fitslike_commons.\
-                                          get_site_location(l_chx['scheduled']['antenna']).lon)
-                            l_lsts= l_lsts.value * unit.hr
-                            # infos
-                            l_class_data['OBJECT']= l_chx['scheduled']['source']
-                            l_class_data['LINE']= "F{}-{:3.3f}-MHz"\
-                                .format(l_chx['frontend']['feed'], l_chx['backend']['bandwidth'])
-                            self.m_obs_general_data['line']= l_class_data['LINE']
-                            try:
-                                #pdb.set_trace()
-                                l_class_data['TELESCOP']=\
-                                    self.m_commons.class_telescope_name(l_chx,self.m_summary['summary']['backend_name'], pol, l_ch)
-                            except ValueError as e:
-                                self.m_logger.error(str(e))
-                            l_mH2O= l_polarization_table['weather']
-                            l_class_data['MH2O']= l_mH2O
-                            # temp
-                            l_class_data['TSYS']= 1.0
-                            l_class_data['CALTEMP']= l_chx['frontend']['cal_mark_temp'].value
-                            # time
-                            l_class_data['LST'] = l_lsts.to('s').value
-                            # CDELT
-                            l_class_data['CDELT1']= (l_chx['frontend']['bandwidth'] / l_chx['backend']['bins']).to('Hz')
-                            # freq and velocity
-                            l_class_data['RESTFREQ']= self.m_summary['summary']['restfreq'].to(unit.Hz).value
-                            self.m_obs_general_data['restfreq']= l_class_data['RESTFREQ']
-                            l_class_data['VELOCITY']= l_chx['scheduled']['vlsr'].to("m/s").value
-                            l_df= (l_chx['backend']['bandwidth'] / l_chx['backend']['bins']).to('Hz')
-                            l_class_data['CDELT1']= l_df.value
-                            self.m_obs_general_data['cdelt1']= l_class_data['CDELT1']
-                            l_deltav= - l_df/ l_class_data['RESTFREQ'] * const.c
-                            l_class_data['DELTAV']= l_deltav.value
-                            # LOG test
-                            #self.m_logger.warn("RESTFREQ {}".format(l_class_data['RESTFREQ']))
-                            # Objects Coordinates
-                            l_class_data['CDELT2'] = l_chx['scheduled']['ra_offset'].to(unit.deg).value
-                            l_class_data['CDELT3'] = l_chx['scheduled']['dec_offset'].to(unit.deg).value
+                            #pdb.set_trace()
+                            l_class_data['TELESCOP']=\
+                                self.m_commons.class_telescope_name(l_section,self.m_summary['summary']['backend_name'], pol, l_ch)
+                        except ValueError as e:
+                            self.m_logger.error(str(e))
+                        l_mH2O= l_polarization_table['weather']
+                        l_class_data['MH2O']= l_mH2O
+                        # temp
+                        l_class_data['TSYS']= 1.0
+                        l_class_data['CALTEMP']= l_section['frontend']['cal_mark_temp'].value
+                        # time
+                        l_class_data['LST'] = l_lsts.to('s').value
+                        # CDELT
+                        l_class_data['CDELT1']= (l_section['frontend']['bandwidth'] / l_section['backend']['bins']).to('Hz')
+                        # freq and velocity
+                        l_class_data['RESTFREQ']= self.m_summary['summary']['restfreq'].to(unit.Hz).value
+                        self.m_obs_general_data['restfreq']= l_class_data['RESTFREQ']
+                        l_class_data['VELOCITY']= l_section['scheduled']['vlsr'].to("m/s").value
+                        l_df= (l_section['backend']['bandwidth'] / l_section['backend']['bins']).to('Hz')
+                        l_class_data['CDELT1']= l_df.value
+                        self.m_obs_general_data['cdelt1']= l_class_data['CDELT1']
+                        l_deltav= - l_df/ l_class_data['RESTFREQ'] * const.c
+                        l_class_data['DELTAV']= l_deltav.value
+                        # LOG test
+                        #self.m_logger.warn("RESTFREQ {}".format(l_class_data['RESTFREQ']))
+                        # Objects Coordinates
+                        l_class_data['CDELT2'] = l_section['scheduled']['ra_offset'].to(unit.deg).value
+                        l_class_data['CDELT3'] = l_section['scheduled']['dec_offset'].to(unit.deg).value
 
-                            l_class_data['AZIMUTH']= getQTableColWithUnit(l_polarization_table,'data_az', unit.deg)
-                            l_class_data['ELEVATIO']= getQTableColWithUnit(l_polarization_table,'data_el', unit.deg)
-                            l_class_data['CRVAL2']= getQTableColWithUnit(l_polarization_table,'data_ra', unit.deg)
-                            l_class_data['CRVAL3']= getQTableColWithUnit(l_polarization_table,'data_dec', unit.deg)
-                            # data
-                            l_class_data['OBSTIME'] = l_chx['backend']['integration_time']
-                            l_class_data['MAXIS1'] = l_chx['backend']['bins']
-                            self.m_obs_general_data['maxis1']= l_class_data['MAXIS1']
-                            # we have to shape classfits data properly according to data shape
-                            # es data shape is 12, 16384 we have to replicate data this shape
-                            rows= data_shape[0]
-                            for k in l_class_data.keys():
-                                l_value= l_class_data[k]
-                                if "SPECTRUM" in k:
-                                    continue
-                                try:
-                                    # this prevent already shaped (rows,) to be warped
-                                    l_class_data[k]= np.full((rows,), l_value)
-                                except Exception  as e :
-                                    self.m_logger.error("Error reshaping classfits data: " +str(e))
-                            # Transform dictionary based converted table in QTable on disk
-                            l_class_table= QTable()
-                            for col in l_class_data.keys():
-                                try:
-                                    # Skip empty columns
-                                    l_class_table.add_column( Column(data= l_class_data[col], name= col) )
-                                except ValueError as e:
-                                    self.m_logger.error("Exception adding column [{}] to classfit converted table {}".format(col, e))
-                            # Table name generation
-                            l_splitted_path= os.path.splitext(l_pol_table_path)
-                            l_class_path= l_splitted_path[0].replace('.','_')+'_class.fits'
-                            self.m_logger.info("input table path: {}".format(l_pol_table_path))
-                            self.m_logger.info("class table path: {}".format(l_class_path))
+                        l_class_data['AZIMUTH']= getQTableColWithUnit(l_polarization_table,'data_az', unit.deg)
+                        l_class_data['ELEVATIO']= getQTableColWithUnit(l_polarization_table,'data_el', unit.deg)
+                        l_class_data['CRVAL2']= getQTableColWithUnit(l_polarization_table,'data_ra', unit.deg)
+                        l_class_data['CRVAL3']= getQTableColWithUnit(l_polarization_table,'data_dec', unit.deg)
+                        # data
+                        l_class_data['OBSTIME'] = l_section['backend']['integration_time']
+                        l_class_data['MAXIS1'] = l_section['backend']['bins']
+                        self.m_obs_general_data['maxis1']= l_class_data['MAXIS1']
+                        # we have to shape classfits data properly according to data shape
+                        # es data shape is 12, 16384 we have to replicate data this shape
+                        rows= data_shape[0]
+                        for k in l_class_data.keys():
+                            l_value= l_class_data[k]
+                            if "SPECTRUM" in k:
+                                continue
                             try:
-                                l_class_table.write(l_class_path)
+                                # this prevent already shaped (rows,) to be warped
+                                l_class_data[k]= np.full((rows,), l_value)
+                            except Exception  as e :
+                                self.m_logger.error("Error reshaping classfits data: " +str(e))
+                        # Transform dictionary based converted table in QTable on disk
+                        l_class_table= QTable()
+                        for col in l_class_data.keys():
+                            try:
+                                # Skip empty columns
+                                l_class_table.add_column( Column(data= l_class_data[col], name= col) )
                             except ValueError as e:
-                                self.m_logger.error("-------- ERROR begin--------")
-                                traceback.print_stack()
-                                self.m_logger.error("Error writing small classfit table to disk {}".format(e))
-                                self.m_logger.error("-------- ERROR end--------")
-                            classfits.append(l_class_path)
-                        except TypeError as e:
-                            traceback.print_exc()
-                            self.m_logger.error("Error preparing class data: " +str(e))
-                        except Exception as e:
-                            traceback.print_exc()
-                            self.m_logger.error("Error preparing class data: " +str(e))
+                                self.m_logger.error("Exception adding column [{}] to classfit converted table {}".format(col, e))
+                        # Table name generation                        
+                        l_class_name= '{}_{}_{}_{}_class.fits'.format(l_feed, l_ch, pol, calibration_type)       
+                        l_class_path= os.path.join(l_feed_path, l_class_name)
+                        self.m_logger.info("class table path: {}".format(l_class_path))
+                        try:
+                            l_class_table.write(l_class_path)
+                        except ValueError as e:
+                            self.m_logger.error("-------- ERROR begin--------")
+                            traceback.print_stack()
+                            self.m_logger.error("Error writing small classfit table to disk {}".format(e))
+                            self.m_logger.error("-------- ERROR end--------")
+                        classfits.append(l_class_path)
+                    except TypeError as e:
+                        traceback.print_exc()
+                        self.m_logger.error("Error preparing class data: " +str(e))
+                    except Exception as e:
+                        traceback.print_exc()
+                        self.m_logger.error("Error preparing class data: " +str(e))
 
             # merging classfits data dicts by polarization
             # classfits is a list of classfits data dict

@@ -27,7 +27,7 @@ def run(p_folder, p_scan_type, p_outPath, p_feed, p_parallelism):
     l_fh.scan_data(p_folder)
     l_fh.group_on_off_cal()        
     l_fh.normalize()
-    #l_fh.ClassFitsAdaptations()        
+    l_fh.ClassFitsAdaptations()        
     #l_fh.classfitsWrite('raw')
     #l_fh.classfitsWrite('on_off')
     #l_fh.classfitsWrite('cal')
