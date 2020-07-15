@@ -454,16 +454,18 @@ class Fitslike_handler():
                             if len(l_opened_tables['reference']) != 0:
                                 l_opened_tables['reference']= l_opened_tables['reference'].group_by(['pol']).groups.aggregate(np.mean)
                                 l_data['reference']= l_opened_tables['reference']['data']
-                        # Processing cal_on mean
+                        # Processing cal_on mean norm
                         if l_opened_tables['cal_on'] != None and l_opened_tables['reference'] != None:
                             if len(l_opened_tables['cal_on']) != 0 and len(l_opened_tables['reference']) != 0 :
                                 l_opened_tables['cal_on']= l_opened_tables['cal_on'].group_by(['pol']).groups.aggregate(np.mean)
                                 l_data['cal_on']= l_opened_tables['cal_on']['data']
-                        # Processing cal_off mean
+                                l_data['cal_on']= (l_data['cal_on'] - l_data['signal'][0]) / l_data['signal'][0]
+                        # Processing cal_off mean norm
                         if l_opened_tables['cal_off'] != None and l_opened_tables['reference'] != None:
                             if len(l_opened_tables['cal_off']) != 0 and len(l_opened_tables['reference']) != 0 :
                                 l_opened_tables['cal_off']= l_opened_tables['cal_off'].group_by(['pol']).groups.aggregate(np.mean)
                                 l_data['cal_off']= l_opened_tables['cal_off']['data']                                            
+                                l_data['cal_off']= (l_data['cal_off'] - l_data['reference']) / l_data['reference']
                     except KeyError as e:
                         self.m_logger.warning("[{}][{}][{}]".format(l_feed,ch,pol))
                         self.m_logger.error("Missing mandatory keyword {}".format(e))
@@ -511,7 +513,7 @@ class Fitslike_handler():
                             good =  ~np.isnan(l_cal) & ~np.isinf(l_cal)
                             l_cal = l_cal[good]                            
                             if len(l_cal) > 0:
-                                meancal = np.median(l_cal) if len(l_cal) > 30 else np.mean(l_cal)
+                                meancal = np.median(l_cal) if len(l_cal) > 30 else np.mean(l_cal)                                
                                 calibration_factor = 1 / meancal * l_calMarkTemp             
                                 calibration_factor= np.float32(calibration_factor.value)* calibration_factor.unit
                             else:
