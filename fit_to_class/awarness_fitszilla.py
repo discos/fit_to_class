@@ -355,6 +355,7 @@ class Awarness_fitszilla():
         for l_zipBe in l_zipBackend:
             l_beDict= dict(zip(l_beDictKeys, l_zipBe))
             l_beDict['integration_time']= self.m_intermediate['be_integration']
+            l_beDict['integration_time'] = l_beDict['integration_time'] * unit.ms
             l_beDict['bandwidth'] *= unit.Unit('MHz')
             l_backEnds[l_beDict['id']]= l_beDict.copy()
 

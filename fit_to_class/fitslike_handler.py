@@ -284,17 +284,17 @@ class Fitslike_handler():
                             self.m_logger.error("{}-{}-{}-reading disk table exception : {}".format(l_feed, l_chx, l_pol,str(e)))
 
         # Feed base work dir cleaning
-        l_group_path= os.path.join(self.m_outputPath, 'fits_groups')
-        if os.path.exists(l_group_path):
-            shutil.rmtree(l_group_path)
-        os.mkdir(l_group_path)
+        self.m_group_path= os.path.join(self.m_outputPath, 'fits_groups')
+        if os.path.exists(self.m_group_path):
+            shutil.rmtree(self.m_group_path)
+        os.mkdir(self.m_group_path)
         # Join tables from on off group
         for l_feed in self.m_group_on_off_cal.keys():
             for l_section in self.m_group_on_off_cal[l_feed].keys():
                 if 'ch_' not in l_section:
                     continue
                  # Work dir creation per feed
-                l_this_group_path= os.path.join(l_group_path, 'group_feed_{}'.format(l_feed))
+                l_this_group_path= os.path.join(self.m_group_path, 'group_feed_{}'.format(l_feed))
                 if not os.path.exists(l_this_group_path):
                     os.mkdir(l_this_group_path)
                 for l_pol in self.m_group_on_off_cal[l_feed][l_section]['pols'].keys():
@@ -385,10 +385,10 @@ class Fitslike_handler():
 
 
         # Norm output dir creation
-        l_norm_path= os.path.join(self.m_outputPath, 'fits_normalized')
-        if os.path.exists(l_norm_path):
-            shutil.rmtree(l_norm_path)
-        os.mkdir(l_norm_path)
+        self.m_norm_path= os.path.join(self.m_outputPath, 'fits_normalized')
+        if os.path.exists(self.m_norm_path):
+            shutil.rmtree(self.m_norm_path)
+        os.mkdir(self.m_norm_path)
         # Feed traverse
         for l_feed in self.m_group_on_off_cal.keys():
             # Work only selected feed, or All
@@ -399,7 +399,7 @@ class Fitslike_handler():
             if not str(l_feed).isdigit():
                 continue
             # Feed folder
-            l_feed_path= os.path.join(l_norm_path, 'normalized_feed_{}'.format(l_feed))
+            l_feed_path= os.path.join(self.m_norm_path, 'normalized_feed_{}'.format(l_feed))
             if not os.path.exists(l_feed_path):
                 os.mkdir(l_feed_path)
             # Section traverse
@@ -428,12 +428,14 @@ class Fitslike_handler():
                         'reference' : QTable(),
                         'cal_on': QTable(),
                         'cal_off': QTable()
-                        }
+                        }                    
                     for on_off_cal in l_opened_tables.keys():
                         if on_off_cal not in l_section_pols[pol].keys():
                             continue
-                        try:
+                        try:                            
                             l_table_path= l_section_pols[pol][on_off_cal]
+                            if not len(l_table_path):
+                                continue                            
                             l_opened_tables[on_off_cal]= QTable.read(l_table_path, memmap= True)
                         except Exception as e:
                             self.m_logger.warning("[{}][{}][{}][{}]".format(l_feed, ch, pol, on_off_cal))
@@ -441,20 +443,27 @@ class Fitslike_handler():
 
                     # Now i've loaded all the tables needed to calibrate one section
                     # Processing reference mean
-                    try:
-                        if l_opened_tables['reference'] != None:
-                            l_opened_tables['reference']= l_opened_tables['reference'].group_by(['pol']).groups.aggregate(np.mean)
-                            l_data['reference']= l_opened_tables['reference']['data']
-                        # Processing cal_on mean
-                        if l_opened_tables['cal_on'] != None and l_opened_tables['reference'] != None:
-                            l_opened_tables['cal_on']= l_opened_tables['cal_on'].group_by(['pol']).groups.aggregate(np.mean)
-                            l_data['cal_on']= l_opened_tables['cal_on']['data']
-                        # Processing cal_off mean
-                        if l_opened_tables['cal_off'] != None and l_opened_tables['reference'] != None:
-                            l_opened_tables['cal_off']= l_opened_tables['cal_off'].group_by(['pol']).groups.aggregate(np.mean)
-                            l_data['cal_off']= l_opened_tables['cal_off']['data']
+                    try:                        
                         # Signal whole data set
                         l_data['signal']= l_opened_tables['signal']['data']
+                        if not l_opened_tables['signal']:                            
+                            continue
+                        if not len(l_opened_tables['signal']):
+                            continue                        
+                        if l_opened_tables['reference'] != None:
+                            if len(l_opened_tables['reference']) != 0:
+                                l_opened_tables['reference']= l_opened_tables['reference'].group_by(['pol']).groups.aggregate(np.mean)
+                                l_data['reference']= l_opened_tables['reference']['data']
+                        # Processing cal_on mean
+                        if l_opened_tables['cal_on'] != None and l_opened_tables['reference'] != None:
+                            if len(l_opened_tables['cal_on']) != 0 and len(l_opened_tables['reference']) != 0 :
+                                l_opened_tables['cal_on']= l_opened_tables['cal_on'].group_by(['pol']).groups.aggregate(np.mean)
+                                l_data['cal_on']= l_opened_tables['cal_on']['data']
+                        # Processing cal_off mean
+                        if l_opened_tables['cal_off'] != None and l_opened_tables['reference'] != None:
+                            if len(l_opened_tables['cal_off']) != 0 and len(l_opened_tables['reference']) != 0 :
+                                l_opened_tables['cal_off']= l_opened_tables['cal_off'].group_by(['pol']).groups.aggregate(np.mean)
+                                l_data['cal_off']= l_opened_tables['cal_off']['data']                                            
                     except KeyError as e:
                         self.m_logger.warning("[{}][{}][{}]".format(l_feed,ch,pol))
                         self.m_logger.error("Missing mandatory keyword {}".format(e))
@@ -468,19 +477,22 @@ class Fitslike_handler():
                     l_calibration_possible= False
                     if len(l_data['signal']) != 0:
                         l_data_raw= True
+                        self.m_logger.info("[{}][{}][{}] Signal data are present".format(l_feed,ch,pol))
                         # Sub calculations, on - off
                         if len(l_data['reference']) and len(l_data['signal']):                            
                             # Check if calculations are possible
                             # TODO implementare solo conteggi senzi cal
                             l_on_off_possible= True
+                            self.m_logger.info("[{}][{}][{}] Reference data are present".format(l_feed,ch,pol))
                             l_calibration_possible= False
                             if l_calMarkTemp:
                                 if len(l_data['cal_on']) and len(l_data['cal_off']):
                                     l_calibration_possible= True
+                                    self.m_logger.info("[{}][{}][{}] Calibration data are present".format(l_feed,ch,pol))
                     #
                     if not l_data_raw:
-                        self.m_logger.critical("Missing input data!")
-                        sys.exit(0)                    
+                        self.m_logger.warning("[{}][{}][{}] No input data, skipping".format(l_feed,ch,pol))
+                        continue
                     self.m_logger.warning("[{}][{}][{}] Applying calibration".format(l_feed,ch,pol))
                     # TODO subs signal table with calibrated data
                     # Calc with units..review
@@ -548,8 +560,12 @@ class Fitslike_handler():
                         self.m_no_cal= True                        
                         self.m_logger.error("[{}][{}][{}] Exception applying calibration to this data set : {}".format(l_feed,ch,pol,e))                           
                     except Exception as e:
-                        self.m_no_cal= True                    
-                        self.m_logger.error("[{}][{}][{}] Exception applying calibration to this data set : {}".format(l_feed,ch,pol,e))   
+                        self.m_no_cal= True            
+                        self.m_logger.error("[{}][{}][{}] Exception applying calibration to this data set : {}".format(l_feed,ch,pol,e))                   
+                    
+        # Delete group data
+        if os.path.exists(self.m_group_path):
+            shutil.rmtree(self.m_group_path, ignore_errors= True)
                         
                     
     def ClassFitsAdaptations(self):
@@ -581,10 +597,10 @@ class Fitslike_handler():
                         return data
 
         # Work folder
-        l_work_folder= os.path.join(self.m_outputPath, 'classfits')
-        if os.path.exists(l_work_folder):
-            shutil.rmtree(l_work_folder)
-        os.mkdir(l_work_folder)
+        self.m_class_path= os.path.join(self.m_outputPath, 'classfits')
+        if os.path.exists(self.m_class_path):
+            shutil.rmtree(self.m_class_path)
+        os.mkdir(self.m_class_path)
         # Feed traverse
         for l_feed in self.m_group_on_off_cal:
             # Feed filter added by user ?
@@ -594,10 +610,9 @@ class Fitslike_handler():
                     continue
             # Only feed, avoid extra data on this level
             if not str(l_feed).isdigit():
-                continue
-            classfits= []
+                continue            
             # Feed folder
-            l_feed_path= os.path.join(l_work_folder, 'class_feed_{}'.format(l_feed))
+            l_feed_path= os.path.join(self.m_class_path, 'class_feed_{}'.format(l_feed))
             if not os.path.exists(l_feed_path):
                 os.mkdir(l_feed_path)
             # Sections traverse
@@ -619,12 +634,12 @@ class Fitslike_handler():
                             calibration_type= 'calibrated'
                         elif 'on_off' in l_section_pols[pol].keys():
                             on_off_data_table_path= l_section_pols[pol]['on_off']
-                            self.m_logger.info("Loading {}".format(calibrated_data_path))
+                            self.m_logger.info("Loading {}".format(on_off_data_table_path))
                             l_polarization_table= QTable.read(on_off_data_table_path, memmap= True)
                             calibration_type= 'on_off'
                         elif 'signal' in l_section_pols[pol].keys():
                             signal_data_path= l_section_pols[pol]['signal']
-                            self.m_logger.info("Loading {}".format(calibrated_data_path))
+                            self.m_logger.info("Loading {}".format(signal_data_path))
                             l_polarization_table= QTable.read(signal_data_path, memmap= True)
                             calibration_type= 'signal'
                         else:
@@ -705,7 +720,7 @@ class Fitslike_handler():
                         l_class_data['CRVAL2']= getQTableColWithUnit(l_polarization_table,'data_ra', unit.deg)
                         l_class_data['CRVAL3']= getQTableColWithUnit(l_polarization_table,'data_dec', unit.deg)
                         # data
-                        l_class_data['OBSTIME'] = l_section['backend']['integration_time']
+                        l_class_data['OBSTIME'] = l_section['backend']['integration_time'].to('s').value
                         l_class_data['MAXIS1'] = l_section['backend']['bins']
                         self.m_obs_general_data['maxis1']= l_class_data['MAXIS1']
                         # we have to shape classfits data properly according to data shape
@@ -718,7 +733,7 @@ class Fitslike_handler():
                             try:
                                 # this prevent already shaped (rows,) to be warped
                                 l_class_data[k]= np.full((rows,), l_value)
-                            except Exception  as e :
+                            except Exception  as e:
                                 self.m_logger.error("Error reshaping classfits data: " +str(e))
                         # Transform dictionary based converted table in QTable on disk
                         l_class_table= QTable()
@@ -732,130 +747,88 @@ class Fitslike_handler():
                         l_class_name= '{}_{}_{}_{}_class.fits'.format(l_feed, l_ch, pol, calibration_type)       
                         l_class_path= os.path.join(l_feed_path, l_class_name)
                         self.m_logger.info("class table path: {}".format(l_class_path))
-                        try:
-                            l_class_table.write(l_class_path)
-                        except ValueError as e:
-                            self.m_logger.error("-------- ERROR begin--------")
-                            traceback.print_stack()
-                            self.m_logger.error("Error writing small classfit table to disk {}".format(e))
-                            self.m_logger.error("-------- ERROR end--------")
-                        classfits.append(l_class_path)
-                    except TypeError as e:
-                        traceback.print_exc()
-                        self.m_logger.error("Error preparing class data: " +str(e))
-                    except Exception as e:
-                        traceback.print_exc()
-                        self.m_logger.error("Error preparing class data: " +str(e))
-
-            # merging classfits data dicts by polarization
-            # classfits is a list of classfits data dict
-            # classList= defaultdict(list)
-            # for d in classfits:
-            #     for k,v in d.items():
-            #         try:
-            #             if not len(v): continue
-            #             for n in range(v.shape[0]):
-            #                 classList[k].append( v[n] )
-            #         except Exception as e:
-            #             self.m_logger.error("Exception on appending data classfits data pot: " +str(e))
-
-            # self.m_group_on_off_cal[l_feed]['classlist']= classList
+                        try:                            
+                            self.classfitsWrite(l_class_path, l_class_table)
+                        except ValueError as e:                            
+                            self.m_logger.error("Error writing small classfit table to disk {}".format(e))                                        
+                    except TypeError as e:                        
+                        self.m_logger.error("Error preparing class data: {}".format(e))
+                    except Exception as e:                        
+                        self.m_logger.error("Error preparing class data: {}".format(e))
+        # Delete norm data
+        if os.path.exists(self.m_norm_path):
+            shutil.rmtree(self.m_norm_path, ignore_errors= True)
 
 
-    def classfitsWrite(self, p_on_what):
+    def classfitsWrite(self, p_file_name, p_class_table):
         """
-        Scrittura file con calcolo header
-        header prende i dati dai dati generici ricavati dalla scansione scansione
-        astropy fits works per column, i have to transpose all data while
-        generating new fits cols ( input data are per row basis
+        Convert Qtable classfits column to fits file format adding appropriate
+        header data
 
         Parameters
         ---------
-
-        p_group: string
-            which group, on ,off , cal_on, cal_off
-        p_on_what: string
-            wich kind of normalized data to use in case of 'on' group
-            it assumes 'on', 'on_off', 'cal'
-
-        """
-        " for every feed "
-        for l_feed in self.m_group_on_off_cal:
-            # TODO remove or evaluate
-            if  l_feed not in range(0,16):continue
-            # Work on ly selected feed
-            if self.m_feed:
-                if self.m_feed not in str(l_feed):
-                    continue
-            l_outFileName= self.m_outputPath+ "feed_{}_{}.fits".format(l_feed,p_on_what)
-            self.m_logger.info("Preparing classfits file : " + l_outFileName)
-            l_newCols=[]
-            " for every column expressed in classfits definition .."
-            for classCol in self.m_commons.getClassfitsColumnsZip():
-                " [ name, form, unit ] column by column data building "
-                " fill one column looking into every feed[on], and builds column data "
-                l_columnFound = False
-                " conditionals, some fields needs dedicated approach"
-                l_classList= self.m_group_on_off_cal[l_feed]['classlist']
-                " converted fits data matches with classfits columns? "
-                " some columns need special care"
-                l_inferredCol= classCol[0]
-                "  we can choose between on on-off and calibrated spectrum for 'on' group "
-                if classCol[0] == "SPECTRUM":
-                    l_inferredCol += '_'+ p_on_what.upper()
-                " "
-                if l_inferredCol in l_classList.keys():
-                    " found match, add data to column data "
-                    l_columnFound= True
-                try:
-                    " adding column to classfits if fitszilla representation matches it"
-                    if l_columnFound:
-                        " some fields needs dedicated approach "
-                        if classCol[0] == "SPECTRUM":
-                            l_rows= l_classList[l_inferredCol][0].shape[0]
-                            l_newCols.append(fits.Column(array= l_classList[l_inferredCol],name= classCol[0],format= "{}D".format(l_rows),unit= classCol[2]))
-                        else:
-                            l_newCols.append(fits.Column(array= l_classList[l_inferredCol],name= classCol[0],format= classCol[1],unit= classCol[2]) )
-
-                except Exception as e:
-                    self.m_logger.error("classfits column creation exception: "+ str(e))
-                    self.m_logger.error("column: " +str(classCol))
-
-            l_hdData= self.m_obs_general_data
-            " header "
-            l_hdu= fits.PrimaryHDU()
+        p_file_name: string
+            Output file name
+        p_class_table: string
+            QTable with clasfits data            
+        """              
+        l_newCols=[]
+        # for every column expressed in classfits definition ..
+        for classCol in self.m_commons.getClassfitsColumnsZip():            
+            # [ name, form, unit ] column by column data building 
+            # fill one column looking into every feed[on], and builds column data 
+            l_columnFound = False
+            # conditionals, some fields needs dedicated approach            
+            # converted fits data matches with classfits columns? 
+            # some columns need special care
+            l_inferredCol= classCol[0]
+            if l_inferredCol in p_class_table.colnames:                
+                # found match, add data to column data 
+                l_columnFound= True                
             try:
-                l_hdu.header['CTYPE1']= "FREQ"
-                l_hdu.header['CRVAL1']= 0
-                l_hdu.header['CRVAL2']= l_hdData['ra']
-                l_hdu.header['CRVAL3']= l_hdData['dec']
-                l_hdu.header['OBJECT'] = l_hdData['source']
-                l_hdu.header['SOURCE'] = l_hdData['source']
-                l_hdu.header['DATE-RED'] = l_hdData['date-red']
-                l_hdu.header['LINE'] = l_hdData['line']
-                l_hdu.header['CDELT1'] = l_hdData['cdelt1']
-                l_hdu.header['RESTFREQ'] = l_hdData['restfreq']
-                l_hdu.header['MAXIS1'] = l_hdData['maxis1']
-            except KeyError as e:
-                self.m_logger.error("Exception filling " + l_outFileName + " header data: "+ str(e))
-                " data "
-            try:
-                " TEST "
-                for col in l_newCols:
-                    print(col.name + " " + str(col.array.shape))
-                l_cdefs= fits.ColDefs(l_newCols)
-                l_hdu= fits.BinTableHDU().from_columns(l_cdefs)
+                # adding column to classfits if fitszilla representation matches it
+                if l_columnFound:
+                    # some fields needs dedicated approach 
+                    if classCol[0] == "SPECTRUM":
+                        l_rows= p_class_table[l_inferredCol][0].shape[0]
+                        l_newCols.append(fits.Column(array= p_class_table[l_inferredCol],name= classCol[0],format= "{}D".format(l_rows),unit= classCol[2]))
+                    else:
+                        l_newCols.append(fits.Column(array= p_class_table[l_inferredCol],name= classCol[0],format= classCol[1],unit= classCol[2]) )
+
             except Exception as e:
-                traceback.print_exc()
-                self.m_logger.error("Exception creating classfits model file")
-                self.m_logger.error("classfits file: " + l_outFileName)
-                self.m_logger.error(str(e))
-                return
-            try:
-                if os.path.exists(l_outFileName):
-                    os.remove(l_outFileName)
-                l_hdu.writeto(l_outFileName)
-            except Exception as e:
-                self.m_logger.error("Exception writings file")
-                self.m_logger.error("classfits file: " + l_outFileName)
-                self.m_logger.error(str(e))
+                self.m_logger.error("classfits column creation exception: {} - {}".format(classCol, e))                
+
+        l_hdData= self.m_obs_general_data
+        # header 
+        l_hdu= fits.PrimaryHDU()
+        try:
+            l_hdu.header['CTYPE1']= "FREQ"
+            l_hdu.header['CRVAL1']= 0
+            l_hdu.header['CRVAL2']= l_hdData['ra']
+            l_hdu.header['CRVAL3']= l_hdData['dec']
+            l_hdu.header['OBJECT'] = l_hdData['source']
+            l_hdu.header['SOURCE'] = l_hdData['source']
+            l_hdu.header['DATE-RED'] = l_hdData['date-red']
+            l_hdu.header['LINE'] = l_hdData['line']
+            l_hdu.header['CDELT1'] = l_hdData['cdelt1']
+            l_hdu.header['RESTFREQ'] = l_hdData['restfreq']
+            l_hdu.header['MAXIS1'] = l_hdData['maxis1']
+        except KeyError as e:
+            self.m_logger.error("Exception filling " + p_file_name + " header data: "+ str(e))
+            # data 
+        try:
+            # TEST 
+            for col in l_newCols:
+                print(col.name + " " + str(col.array.shape))
+            l_cdefs= fits.ColDefs(l_newCols)
+            l_hdu= fits.BinTableHDU().from_columns(l_cdefs)
+        except Exception as e:            
+            self.m_logger.error("Exception creating classfits model file {} - {}".format(p_file_name, e))            
+            return
+        try:
+            if os.path.exists(p_file_name):
+                os.remove(p_file_name)
+            l_hdu.writeto(p_file_name)
+            self.m_logger.info("Wrote classfits {}".format(p_file_name))
+        except Exception as e:            
+            self.m_logger.error("Exception writing fitsl  file {} - {}".format(p_file_name, e))
