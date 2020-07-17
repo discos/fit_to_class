@@ -9,17 +9,14 @@ import astropy.units as unit
 from astropy.table import QTable, vstack, Column
 from astropy.time import Time
 import astropy.constants as const
-from collections import defaultdict
 from multiprocessing import Pool
 import sys
 import os
 import shutil
-import traceback
 import pdb
 
 from fit_to_class import fitslike
 from fit_to_class  import awarness_fitszilla
-from fit_to_class.fitslike_commons import keywords as kws
 from fit_to_class import fitslike_commons
 
 
@@ -802,31 +799,80 @@ class Fitslike_handler():
 
         l_hdData= self.m_obs_general_data
         # header 
-        l_hdu= fits.PrimaryHDU()
-        try:
-            l_hdu.header['CTYPE1']= "FREQ"
-            l_hdu.header['CRVAL1']= 0
-            l_hdu.header['CRVAL2']= l_hdData['ra']
-            l_hdu.header['CRVAL3']= l_hdData['dec']
-            l_hdu.header['OBJECT'] = l_hdData['source']
-            l_hdu.header['SOURCE'] = l_hdData['source']
-            l_hdu.header['DATE-RED'] = l_hdData['date-red']
-            l_hdu.header['LINE'] = l_hdData['line']
-            l_hdu.header['CDELT1'] = l_hdData['cdelt1']
-            l_hdu.header['RESTFREQ'] = l_hdData['restfreq']
-            l_hdu.header['MAXIS1'] = l_hdData['maxis1']
-        except KeyError as e:
-            self.m_logger.error("Exception filling " + p_file_name + " header data: "+ str(e))
-            # data 
+        l_hdu= fits.PrimaryHDU()        
+        # data 
         try:
             # TEST 
-            for col in l_newCols:
-                print(col.name + " " + str(col.array.shape))
-            l_cdefs= fits.ColDefs(l_newCols)
+            #for col in l_newCols:
+            #    print(col.name + " " + str(col.array.shape))
+            l_cdefs= fits.ColDefs(l_newCols)            
             l_hdu= fits.BinTableHDU().from_columns(l_cdefs)
         except Exception as e:            
             self.m_logger.error("Exception creating classfits model file {} - {}".format(p_file_name, e))            
             return
+        #header 
+        try:
+            # TODO Rivedere i campi DELT, PIX ...
+            l_hdu.header['EXTNAME'] = "MATRIX"
+            l_hdu.header['EXTVER'] = 1
+            l_hdu.header['MAXIS'] = 4
+            if 'maxis1' in l_hdData.keys():
+                l_hdu.header['MAXIS1'] = l_hdData['maxis1']
+            else:
+                l_hdu.header['MAXIS1'] = 0.0
+            l_hdu.header['MAXIS2'] = 4
+            l_hdu.header['MAXIS3'] = 4
+            l_hdu.header['MAXIS4'] = 4            
+            l_hdu.header['CTYPE1']= "FREQ"
+            l_hdu.header['CRVAL1']= 0.0
+            if 'cdelt1' in l_hdData.keys():
+                l_hdu.header['CDELT1'] = l_hdData['cdelt1']
+            else:
+                l_hdu.header['CDELT1'] = 0.0
+            l_hdu.header['CTYPE2']= "RA"
+            if 'ra' in l_hdData.keys():
+                l_hdu.header['CRVAL2']= l_hdData['ra']
+            else:
+                l_hdu.header['CRVAL2']= 0.0
+            l_hdu.header['CDELT2']= 0.0
+            l_hdu.header['CRPIX2']= 0.0
+            l_hdu.header['CTYPE3']= "DEC"
+            if 'dec' in l_hdData.keys():
+                l_hdu.header['CRVAL3']= l_hdData['dec']
+            else:
+                l_hdu.header['CRVAL3']= 0.0            
+            l_hdu.header['CDELT3']= 0.0
+            l_hdu.header['CRPIX3']= 0.0
+            l_hdu.header['CTYPE4']= "STOKES"
+            l_hdu.header['CRVAL4']= 0.0
+            l_hdu.header['CDELT4']= 0.0
+            l_hdu.header['CRPIX4']= 0.0
+            l_hdu.header['SUBSCAN']= 1
+            if 'line' in l_hdData.keys():
+                l_hdu.header['LINE'] = l_hdData['line']
+            else:
+                l_hdu.header['LINE'] = " "
+            if 'source' in l_hdData.keys():
+                l_hdu.header['OBJECT'] = l_hdData['source']            
+            else:
+                l_hdu.header['OBJECT'] = " "
+            if 'restfreq' in l_hdData.keys():
+                l_hdu.header['RESTFREQ'] = l_hdData['restfreq']
+            else:
+                 l_hdu.header['RESTFREQ'] = 0.0
+            l_hdu.header['VELDEF']= 'RADI_LSR'
+            l_hdu.header['GAINIMAG']= 0.0
+            l_hdu.header['BEAMEFF']= 0.0
+            l_hdu.header['FORMEFF']= 0.0
+            if 'restfreq' in l_hdData.keys():
+                l_hdu.header['DATE-RED'] = l_hdData['date-red']        
+            else:
+                l_hdu.header['DATE-RED'] = " "
+            l_hdu.header['EPOCH']= 2000.0
+            l_hdu.header['CRVAL'] = 0
+        except KeyError as e:
+            self.m_logger.error("Exception filling " + p_file_name + " header data: "+ str(e))
+        # Disk writing
         try:
             if os.path.exists(p_file_name):
                 os.remove(p_file_name)
