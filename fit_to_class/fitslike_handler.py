@@ -710,14 +710,20 @@ class Fitslike_handler():
                         l_class_data['DELTAV']= l_deltav.value
                         # LOG test
                         #self.m_logger.warn("RESTFREQ {}".format(l_class_data['RESTFREQ']))
-                        # Objects Coordinates
-                        l_class_data['CDELT2'] = l_section['scheduled']['ra_offset'].to(unit.deg).value
-                        l_class_data['CDELT3'] = l_section['scheduled']['dec_offset'].to(unit.deg).value
-
+                        # Objects Coordinates   
+                        # CRVAL 2,3: target object coordiantes                        
+                        l_class_data['CRVAL2']= self.m_summary['summary']['target_ra'].to(unit.deg).value
+                        l_class_data['CRVAL3']= self.m_summary['summary']['target_dec'].to(unit.deg).value
+                        # CDELT 2,3: observer - target
+                        l_observed_ra= getQTableColWithUnit(l_polarization_table,'data_ra', unit.deg)                        
+                        l_offset_ra= (l_observed_ra - l_class_data['CRVAL2'])* np.cos(l_class_data['CRVAL3'])
+                        l_class_data['CDELT2']= l_offset_ra
+                        l_observed_dec= getQTableColWithUnit(l_polarization_table,'data_dec', unit.deg)                        
+                        l_offset_dec= (l_observed_dec - l_class_data['CRVAL3'])
+                        l_class_data['CDELT3']= l_offset_dec
+                        # az el deg
                         l_class_data['AZIMUTH']= getQTableColWithUnit(l_polarization_table,'data_az', unit.deg)
                         l_class_data['ELEVATIO']= getQTableColWithUnit(l_polarization_table,'data_el', unit.deg)
-                        l_class_data['CRVAL2']= getQTableColWithUnit(l_polarization_table,'data_ra', unit.deg)
-                        l_class_data['CRVAL3']= getQTableColWithUnit(l_polarization_table,'data_dec', unit.deg)
                         # data
                         l_class_data['OBSTIME'] = l_section['backend']['integration_time'].to('s').value
                         l_class_data['MAXIS1'] = l_section['backend']['bins']

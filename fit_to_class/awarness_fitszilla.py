@@ -172,12 +172,14 @@ class Awarness_fitszilla():
         """
         Keywords from summary.fits
         """
-        l_keys= [ 'restfreq', 'backend_name' ]
+        l_keys= [ 'restfreq', 'backend_name', 'target_ra', 'target_dec' ]
         l_restFreq= self.m_intermediate['sum_restfreq'] * unit.MHz
+        l_target_ra= self.m_intermediate['target_ra'] * unit.rad
+        l_target_dec= self.m_intermediate['target_dec'] * unit.rad
         if self.m_intermediate['sum_backend_name']== 0.0:
             self.m_intermediate['sum_backend_name']= 'UNKNOWN'
             self._errorFromMissingKeyword('scheduled', 'obs_backend_name')
-        l_values= [l_restFreq, self.m_intermediate['sum_backend_name']]
+        l_values= [l_restFreq, self.m_intermediate['sum_backend_name'], l_target_ra, l_target_dec]
         self.m_processedRepr['summary']= dict(zip(l_keys, l_values))
         print(self.m_processedRepr['summary'])
 
@@ -613,7 +615,6 @@ class Awarness_fitszilla():
                                            l_correctedXoff,
                                            l_correctedYoff,
                                            l_location)
-
             # coordinates dict storage
             for feed in self.m_processedRepr.keys():
                 if self.m_feed:
