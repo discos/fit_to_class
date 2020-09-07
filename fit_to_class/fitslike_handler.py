@@ -48,7 +48,7 @@ def _envelope_subscan(p_logger, p_ftype, p_feed, p_inpath, p_outpath) -> dict:
     except Exception as e:
         p_logger.error("Skipping input file {} due to an excpetion: \n{}".format(p_inpath, e))
         return {}
-    l_aware= awarness_fitszilla.Awarness_fitszilla(l_fits, p_inpath, p_feed)
+    l_aware= awarness_fitszilla.Awarness_fitszilla(l_fits, p_inpath, l_filename , p_feed)
     l_aware.setOutputPath(p_outpath)
     l_aware.parse()
     l_repr= l_aware.process()
@@ -438,7 +438,7 @@ class Fitslike_handler():
                             self.m_logger.warning("[{}][{}][{}][{}]".format(l_feed, ch, pol, on_off_cal))
                             self.m_logger.error("Error reading goruped table {} - {}".format(l_table_path, e))
 
-                    # Now i've loaded all the tables needed to calibrate one section
+                    # Now i've loaded all tables needed to calibrate one section
                     # Processing reference mean
                     try:                        
                         # Signal whole data set
@@ -670,8 +670,10 @@ class Fitslike_handler():
                         # Lavoro con i dati integrati
                         # ut
                         l_tMjd= l_polarization_table['data_time_mjd']
-                        l_timeMjd= Time(l_tMjd, format='mjd', scale='utc')
+                        l_timeMjd= Time(l_tMjd, format='mjd', scale='utc')                        
                         l_class_data['UT']= ( l_tMjd - np.floor(l_tMjd)) * 86400
+                        # Usa questa per ricerca i dati di ingresso dai file di input tramite 'time'
+                        #l_class_data['UT']= l_polarization_table['data_time_mjd']
                         # date
                         l_class_data['DATE-OBS']= l_timeMjd.strftime('%d/%m/%y')
                         # lsts
@@ -681,7 +683,7 @@ class Fitslike_handler():
                         l_lsts= l_lsts.value * unit.hr
                         # infos
                         l_class_data['OBJECT']= l_section['scheduled']['source']
-                        l_class_data['LINE']= "F{}-{:3.3f}-MHz"\
+                        l_class_data['LINE']= "F{}-{:3.3f}"\
                             .format(l_section['frontend']['feed'], l_section['backend']['bandwidth'])
                         self.m_obs_general_data['line']= l_class_data['LINE']
                         try:
@@ -700,7 +702,14 @@ class Fitslike_handler():
                         # CDELT
                         l_class_data['CDELT1']= (l_section['frontend']['bandwidth'] / l_section['backend']['bins']).to('Hz')
                         # freq and velocity
-                        l_class_data['RESTFREQ']= self.m_summary['summary']['restfreq'].to(unit.Hz).value
+                        #pdb.set_trace()
+                        l_class_data['RESTFREQ']= self.m_summary['summary']['restfreq'].to(unit.Hz).value                        
+                        # Caso semplificato (<1) se la rest freq è a 0 uso la frequenza del canale bins/2+1
+                        if l_class_data['RESTFREQ'] != None:
+                            if l_class_data['RESTFREQ'] < 1:
+                                l_class_data['RESTFREQ']= l_section['frontend']['local_oscillator'].to('Hz') +\
+                                                    l_class_data['CDELT1'] * (l_section['backend']['bins']/2 +1)
+                                l_class_data['RESTFREQ']= l_class_data['RESTFREQ'].value
                         self.m_obs_general_data['restfreq']= l_class_data['RESTFREQ']
                         l_class_data['VELOCITY']= l_section['scheduled']['vlsr'].to("m/s").value
                         l_df= (l_section['backend']['bandwidth'] / l_section['backend']['bins']).to('Hz')

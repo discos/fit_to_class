@@ -26,7 +26,7 @@ from fit_to_class import fitslike_commons
 class Awarness_fitszilla():
     """fitszilla data parser"""
 
-    def __init__(self, l_fitszilla, p_path, p_feed= None):
+    def __init__(self, l_fitszilla, p_path, p_file_name, p_feed= None):
         """
         Store fitzilla file
 
@@ -45,6 +45,7 @@ class Awarness_fitszilla():
         self.m_errors= [] # errori interni, stringa composta, cchi come
         l_path, self.m_fileName = os.path.split(p_path)
         self.m_path= l_path
+        self.m_file_name= p_file_name
         self.m_outputPath= self.m_path
         self.m_commons = fitslike_commons.Fitslike_commons()
         self.m_jsonRepr = fitslike_keywords.Keyword_json('fitszilla')
@@ -550,10 +551,8 @@ class Awarness_fitszilla():
         # Process coordinates for every table entries
         l_coordinatesDict= {
             'data_time': np.asarray(self.m_intermediate['data_time']),
-            'data_az': np.asarray(self.m_intermediate['data_az']) \
-                * unit.rad,
-            'data_el': np.asarray(self.m_intermediate['data_el']) \
-                * unit.rad,
+            'data_az': np.asarray(self.m_intermediate['data_az']) * unit.rad - self.m_scheduled['az_offset'] ,
+            'data_el': np.asarray(self.m_intermediate['data_el']) * unit.rad - self.m_scheduled['el_offset'],
             'data_derot_angle': np.asarray(
                 self.m_intermediate['data_derot_angle']
                 )* unit.rad
@@ -568,6 +567,7 @@ class Awarness_fitszilla():
             l_feedCoordinatesDict[l_feeds]= l_coordinatesDict.copy()
         #pdb.set_trace()
         # Apply offset + rotation adjust for every feed
+        # TODO Applicare offset di puntametno da header del file az,el offset
         # rest angle for every feed
         l_feedXOffsets = self.m_intermediate['fe_x_offset']* unit.rad
         l_feedYOffsets = self.m_intermediate['fe_y_offset']* unit.rad
@@ -724,6 +724,7 @@ class Awarness_fitszilla():
                 else:
                     return True
             if l_signal == None :
+                self.m_logger.warning("Signal keyword not present using offset to set is_on flag!")
                 return p_subScan['ccordinates']['az_offset'] > 1e-4 * unit.rad
 
         # Start function
@@ -844,7 +845,8 @@ class Awarness_fitszilla():
                 on_col= Column(on_col_data, 'is_on')
                 l_oneTable.add_column(on_col)                
                 # Adding on off cal column
-                l_temporary_tables= []
+                l_temporary_tables= []                
+            
                 for group in  l_oneTable.group_by(['pol']).groups:
                     # Cal on cal off
                     l_isCal= _is_cal(l_chx, group)
@@ -852,22 +854,22 @@ class Awarness_fitszilla():
                     if l_isCal and np.any(group['is_on']):
                         cal_on_col= Column([1]*len(group),'cal_on')
                         group.add_column(cal_on_col)
-                        self.m_logger.info("{}_{}_{} is cal_on".format(feed, chx, group['pol'][0]))
+                        self.m_logger.info("{}--{}_{}_{} is cal_on".format(self.m_file_name, feed, chx, group['pol'][0]))
                     #Cal off
                     if l_isCal and not np.any(group['is_on']):
                         cal_off_col= Column([1]*len(group),'cal_off')
                         group.add_column(cal_off_col)
-                        self.m_logger.info("{}_{}_{} is cal_off".format(feed, chx, group['pol'][0]))
+                        self.m_logger.info("{}--{}_{}_{} is cal_off".format(self.m_file_name, feed, chx, group['pol'][0]))
                     # Signal
                     if not l_isCal and np.any(group['is_on']):
                         signal_col= Column([1]*len(group),'signal')
                         group.add_column(signal_col)           
-                        self.m_logger.info("{}_{}_{} is signal".format(feed, chx, group['pol'][0]))
+                        self.m_logger.info("{}--{}_{}_{} is signal".format(self.m_file_name, feed, chx, group['pol'][0]))
                     # Off
                     if not l_isCal and not np.any(group['is_on']):
                         off_col= Column([1]*len(group),'reference')
                         group.add_column(off_col)
-                        self.m_logger.info("{}_{}_{} is reference".format(feed, chx, group['pol'][0]))
+                        self.m_logger.info("{}--{}_{}_{} is reference".format(self.m_file_name, feed, chx, group['pol'][0]))
                     # Removing unusefull data from table group 
                     del group['is_on']
                     del group['flag_cal']
