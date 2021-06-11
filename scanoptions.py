@@ -1,0 +1,121 @@
+import os
+import logging
+from fit_to_class import fitslike_scangeometry
+from fit_to_class import fitslike_scantype
+
+
+class ScanOptions:
+    """
+    Scanning parameters 
+    it takes global script variable lile scan_geometry and scan_types    
+    """
+
+    # Scan and type structures
+    scan_geometry= fitslike_scangeometry.ScanGeometry()
+    available_scan_geo_elements= scan_geometry.get_types()
+    scan_geo_rules= scan_geometry.get_rules()
+    scan_types= fitslike_scantype.ScanType()
+    available_scan_types= scan_types.get_types()
+    output_fname_suffix= '_classfits'
+
+    def __init__(self, p_logger):
+        self.folder="."
+        self._output_path=""
+        self.type= ""
+        self.feed= "0"
+        self.raw=False
+        self.geometry= ""
+        self.parallel= 4
+        self._errors= False
+        self._logger= p_logger
+
+    
+    # FOLDER
+
+    @property
+    def folder(self):
+        return self._folder
+
+    @folder.setter
+    def folder(self, p_folder):
+        if type(p_folder) is not str:
+            self._errors= True
+            self._logger.error("Folder argument shoud be of string type")
+            return
+        if not os.path.isdir(p_folder):
+            self._errors= True
+            self._logger.error("Folder argument shoud be a valid path")
+            return
+        self._folder= p_folder.rstrip('/')      
+        tail, head = os.path.split(self._folder)         
+        self._output_path= tail+ head+ ScanOptions.output_fname_suffix +'/'          
+
+    def get_output_path(self) -> str:
+        return self._output_path
+
+    def get_errors(self) -> bool:
+        return self._errors
+
+    # SCAN TYPE
+
+    @property
+    def type(self):
+        return self._type
+
+    @type.setter
+    def type(self, p_type_str):
+        self._type= ScanOptions.scan_types.get_enum_type(p_type_str)
+    
+    # SCAN GEOMETRY
+
+    @property
+    def geometry(self):
+        return self._geometry
+    
+    @geometry.setter
+    def geometry(self, p_geometry_str):
+        if not ScanOptions.scan_geometry.parse(p_geometry_str):
+            self._logger.error("Invalid geomtry format or values")
+            self._errors= True
+            return
+        self._geometry= ScanOptions.scan_geometry.get_geometry()
+
+    # RAW SCAN
+
+    @property
+    def raw(self):
+        return self._raw
+
+    @raw.setter
+    def raw(self, p_value):
+        if type(p_value) is not bool:
+            self._raw= False
+            return
+        self._raw= p_value
+
+    # SPECIFIC FEED 
+
+    @property
+    def feed(self):
+        return self._feed
+
+    @feed.setter
+    def feed(self, p_feed):
+        if type(p_feed) is not int:
+            self._feed= None
+            return
+        self._feed= p_feed
+
+    
+    # PARALLELISM
+
+    @property
+    def parallel(self):
+        return self._parallel
+    
+    @parallel.setter
+    def parallel(self, p_par):
+        if type(p_par) is not int:
+            return
+        self._parallel= p_par
+    
