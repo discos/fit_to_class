@@ -58,7 +58,8 @@ class ScanGeometry:
             True: input format valid            
             
         """        
-
+        if p_geo_str is None:
+            return True
         if type(p_geo_str) is not str:
             return False
         if not p_geo_str:

@@ -21,15 +21,24 @@ class ScanOptions:
     def __init__(self, p_logger):
         self.folder="."
         self._output_path=""
-        self.type= ""
-        self.feed= "0"
+        self.type= None
+        self.feed= 0
         self.raw=False
         self.geometry= None
         self.parallel= 4
         self._errors= False
-        self._logger= p_logger
+        self._logger= p_logger        
 
-    
+
+    def __str__(self):
+        return "SCAN OPTIONS:\n" + \
+                "Folder: " + self.folder +"\n"\
+                "Output Path " + self._output_path +"\n"\
+                "Scan Type: " + ScanOptions.scan_types.get_str_type(self.type) +"\n"\
+                "Geometry: " + str(self.geometry) +"\n"\
+                "Feed: " + str(self.feed) +"\n"\
+                "parallelism: " + str(self.parallel) + "\n"
+
     # FOLDER
 
     @property
@@ -38,13 +47,10 @@ class ScanOptions:
 
     @folder.setter
     def folder(self, p_folder):
-        if type(p_folder) is not str:
-            self._errors= True
-            self._logger.error("Folder argument shoud be of string type")
-            return
-        if not os.path.isdir(p_folder):
-            self._errors= True
-            self._logger.error("Folder argument shoud be a valid path")
+        if type(p_folder) is not str:            
+            raise ValueError("Folder argument shoud be of string type")            
+        if not os.path.isdir(p_folder):            
+            raise ValueError("Folder argument shoud be a valid path")
             return
         self._folder= p_folder.rstrip('/')      
         tail, head = os.path.split(self._folder)         
@@ -75,9 +81,7 @@ class ScanOptions:
     @geometry.setter
     def geometry(self, p_geometry_str):
         if not ScanOptions.scan_geometry.parse(p_geometry_str):
-            self._logger.error("Invalid geomtry format or values")
-            self._errors= True
-            return
+            raise ValueError("Invalid geometry format or values")            
         self._geometry= ScanOptions.scan_geometry.get_geometry()
 
     # RAW SCAN
@@ -89,8 +93,7 @@ class ScanOptions:
     @raw.setter
     def raw(self, p_value):
         if type(p_value) is not bool:
-            self._raw= False
-            return
+            raise ValueError("Raw scan option nees BOOL type")
         self._raw= p_value
 
     # SPECIFIC FEED 
@@ -101,9 +104,11 @@ class ScanOptions:
 
     @feed.setter
     def feed(self, p_feed):
-        if type(p_feed) is not int:
+        if p_feed is None:
             self._feed= None
             return
+        if type(p_feed) is not int:
+            raise ValueError("Feed specification need INT type")
         self._feed= p_feed
 
     
@@ -116,6 +121,6 @@ class ScanOptions:
     @parallel.setter
     def parallel(self, p_par):
         if type(p_par) is not int:
-            return
+            raise ValueError("Parallel computation requires INT value")
         self._parallel= p_par
     

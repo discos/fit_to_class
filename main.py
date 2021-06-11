@@ -5,7 +5,6 @@ converter entry point
 """
 
 import argparse
-import os
 import logging
 from fit_to_class import fitslike_commons
 import scanoptions
@@ -21,8 +20,7 @@ def run():
     l_formatter =logging.Formatter('[%(filename)s:%(lineno)s - %(funcName)s() ] %(message)s')
     l_logCh = logging.StreamHandler()            
     l_logCh.setFormatter(l_formatter)
-    l_logger.setLevel(logging.INFO)
-    l_logger.info("Testing fitslike handler unit")
+    l_logger.setLevel(logging.DEBUG)
     if not len(l_logger.handlers):
         l_logger.addHandler(l_logCh)
 
@@ -35,23 +33,29 @@ def run():
     parser.add_argument("folder", help= "Subscan folder")
     # Type and geometry
     parser.add_argument("-t","--type", help= "Subscan types: " + str(scan_options.available_scan_types) ,\
-                        choices= scan_options.available_scan_types, default= 'nod')
+                        choices= scan_options.available_scan_types, default= 'ONOFF')
     parser.add_argument("-g", "--geometry", help="Define scan geometry rules: " + scan_options.scan_geo_rules , type= str, default= "")    
     # Specific feed 
-    parser.add_argument("-fd", "--feed", help="Which feed to be parsed( it'll parse just one feed)", type=int)    
+    parser.add_argument("-fd", "--feed", help="Which feed to be parsed( it'll parse just one feed)", type=int, default= None)    
     # Grouping options
     parser.add_argument("-r", "--raw", help= "Avoid grouping data by on off cal, convert all data in raw mode", action= "store_true")
     # Computing oprions
-    parser.add_argument("-p", "--parallels", help= "How many input file parsed at a time", type= int)
+    parser.add_argument("-p", "--parallels", help= "How many input file parsed at a time", type= int, default= 4)
     # Parsing
     args= parser.parse_args()
+    
+    # Build scan options
+    try:
+        scan_options.folder= args.folder
+        scan_options.raw= args.raw
+        scan_options.type= args.type
+        scan_options.geometry= args.geometry
+        scan_options.parallel= args.parallels
+    except ValueError as e:
+        l_logger.error("Got wrong input parameter :\n" + str(e))
 
-    scan_options.folder= args.folder
-    scan_options.raw= args.raw
-    scan_options.type= args.type
-    scan_options.geometry= args.geometry
-    scan_options.parallel= args.parallels
-
+    l_logger.info(scan_options)
+    
     # Scan pipeline
     pipeline= scanpipeline.ScanPipeline(l_logger)
     pipeline.set_scan_options(scan_options)

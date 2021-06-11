@@ -28,4 +28,10 @@ class ScanType:
         except:
             return ScanType.NOTVALID
 
+    def get_str_type(self, p_type) -> str:
+        for key, value in self.__types.items():
+            if p_type == key:
+                return key
+        return "Unknown"
+
     
