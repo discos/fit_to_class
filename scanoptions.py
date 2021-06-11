@@ -24,7 +24,7 @@ class ScanOptions:
         self.type= ""
         self.feed= "0"
         self.raw=False
-        self.geometry= ""
+        self.geometry= None
         self.parallel= 4
         self._errors= False
         self._logger= p_logger

@@ -15,27 +15,6 @@ def run():
     """
     Running program
     """
-<<<<<<< Updated upstream
-    global logger
-    # Output path building
-    l_fh= fitslike_handler.Fitslike_handler( p_raw, p_scan_type, p_feed, p_files_per_scan)        
-    tail, head = os.path.split(p_path)         
-    l_outPath= tail+ head+ output_fname_suffix +'/'        
-    l_fh.setOutputPath(l_outPath)
-    # Data scan
-    l_fh.scan_data(p_path)
-    if p_raw:
-    # Data conversion
-        l_fh.group_on_off_cal()
-        l_fh.ClassFitsAdaptations()
-    else:
-        l_fh.group_on_off_cal()
-        l_fh.normalize()
-        l_fh.ClassFitsAdaptations()
-
-=======
->>>>>>> Stashed changes
-
     # Logger
     l_commons = fitslike_commons.Fitslike_commons()    
     l_logger = logging.getLogger(l_commons.logger_name())
