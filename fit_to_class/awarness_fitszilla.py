@@ -203,6 +203,14 @@ class Awarness_fitszilla():
             self.m_intermediate['obs_az_offset']* unit.rad
         self.m_intermediate['obs_el_offset'] = \
             self.m_intermediate['obs_el_offset']*unit.rad
+        self.m_intermediate['obs_gal_lat_offset'] = \
+            self.m_intermediate['obs_gal_lat_offset']*unit.rad
+        self.m_intermediate['obs_gal_lon_offset'] = \
+            self.m_intermediate['obs_gal_lon_offset']*unit.rad
+        self.m_intermediate['obs_user_lat_offset'] = \
+            self.m_intermediate['obs_user_lat_offset']*unit.rad
+        self.m_intermediate['obs_user_lon_offset'] = \
+            self.m_intermediate['obs_user_lon_offset']*unit.rad   
         self.m_intermediate['file_name']= self.m_fileName
         self.m_intermediate['obs_vlsr'] *=  unit.Unit("km/s")
         "todo : trasportare le coordinate  per ogni feed?"
@@ -218,6 +226,9 @@ class Awarness_fitszilla():
             l_scheduled['dec_offset']= self.m_intermediate['obs_dec_offset']
             l_scheduled['az_offset']= self.m_intermediate['obs_az_offset']
             l_scheduled['el_offset']= self.m_intermediate['obs_el_offset']
+            l_scheduled['user_lat_offset']= self.m_intermediate['obs_user_lat_offset']
+            l_scheduled['user_lon_offset']= self.m_intermediate['obs_user_lon_offset']
+            l_scheduled['user_offset_frame']= self.m_intermediate['obs_user_offset_frame']
             l_scheduled['signal']= self.m_intermediate['obs_signal']
             l_scheduled['scan_type']= self.m_intermediate['obs_scantype']
             l_scheduled['file_name']= self.m_intermediate['file_name']
@@ -226,6 +237,9 @@ class Awarness_fitszilla():
             self.m_logger.error("Key exception : " + str(e))
             self._errorFromMissingKeyword('scheduled', str(e))
         self.m_scheduled= l_scheduled.copy()
+        # Check offset frame type
+        if self.m_scheduled['user_offset_frame'] == 'GAL':
+            self.m_logger.error("Galactic frame conversion not supported! cannot continue");
 
     def _process_spectrum(self):
         """
@@ -521,38 +535,63 @@ class Awarness_fitszilla():
                                        p_xoffs, p_yoffs,
                                        p_location):
             """
-            Converion from alt-az to ra-dec.
+            Conversion from alt-az to ra-dec.
             Offset must be correccted based on observation time.
-
             Returns:
             --------
-            Actual ra dec lists
-            """
-            # Calculate observing angle
-            p_yoffs = p_yoffs
-            p_xoffs = p_xoffs
+            Actual ra dec lists            
+            
+            """            
             l_el = copy.deepcopy(p_el)
-            l_az = copy.deepcopy(p_az)
-            l_el += p_yoffs
-            l_az += p_xoffs / np.cos(l_el)
-            l_coordsAltAz = AltAz(az=Angle(l_az),
-                                  alt=Angle(l_el),
-                                  location= p_location,
-                                  obstime= p_obstimes)
-            # According to line_profiler, coords.icrs is *by far* the longest
-            # operation in this function, taking between 80 and 90% of the
-            # execution time. Need to study a way to avoid this.
+            l_az = copy.deepcopy(p_az)            
+            
+            # Basic version, header fitszilla version < V1.21                                     
+            # TODO è corretto fare la conversione standard con gal? non si cagano gli offset..
+            if self.m_scheduled['user_offset_frame']== 'GAL':
+                self.m_logger.error("Cannot convert coordinates! skupping..data will result as incomplete?")
+                # feed offset (corected)relates to az, el they need recalc to add az
+                l_el += p_yoffs
+                l_az += p_xoffs / np.cos(l_el)
+                # TODO Conversion to adapt orign to az, el allowing data to fit ICRS !?
+                l_coordsAltAz = AltAz(az=Angle(l_az),
+                                      alt=Angle(l_el),
+                                      location= p_location,
+                                      obstime= p_obstimes)
+                # According to line_profiler, coords.icrs is *by far* the longest
+                # operation in this function, taking between 80 and 90% of the
+                # execution time. Need to study a way to avoid this.
+                l_coords_deg = l_coordsAltAz.transform_to(ICRS)
+                l_ra = np.radians(l_coords_deg.ra)
+                l_dec = np.radians(l_coords_deg.dec)
+                return l_ra, l_dec        
+                        
+            # Pre Apply offset for HOR
+            if self.m_scheduled['user_offset_frame']== 'HOR':
+                self.m_logger.info("Offset frame HOR ")
+                l_el = l_el + p_yoffs - self.m_scheduled['user_lat_offset']
+                l_az = l_az +( p_xoffs - self.m_scheduled['user_lon_offset'] ) / np.cos(l_el)                
+            
+            # Frame change
+            l_coordsAltAz = AltAz(az=Angle(l_az), alt=Angle(l_el), location= p_location, obstime= p_obstimes)
             l_coords_deg = l_coordsAltAz.transform_to(ICRS)
-            l_ra = np.radians(l_coords_deg.ra)
-            l_dec = np.radians(l_coords_deg.dec)
-
+            
+            # Post apply offset for
+            if self.m_scheduled['user_offset_frame']== 'EQ':
+                self.m_logger.info("Offset frame EQ")
+                l_dec = np.radians(l_coords_deg.dec) - self.m_scheduled['user_lat_offset']
+                l_ra = np.radians(l_coords_deg.ra) - self.m_scheduled['user_lon_offset'] / np.cos(l_dec)
+            else:
+                l_ra = np.radians(l_coords_deg.ra)
+                l_dec = np.radians(l_coords_deg.dec)
+                      
             return l_ra, l_dec
+
 
         # Process coordinates for every table entries
         l_coordinatesDict= {
             'data_time': np.asarray(self.m_intermediate['data_time']),
-            'data_az': np.asarray(self.m_intermediate['data_az']) * unit.rad - self.m_scheduled['az_offset'] ,
-            'data_el': np.asarray(self.m_intermediate['data_el']) * unit.rad - self.m_scheduled['el_offset'],
+            'data_az': np.asarray(self.m_intermediate['data_az']) * unit.rad,
+            'data_el': np.asarray(self.m_intermediate['data_el']) * unit.rad,
             'data_derot_angle': np.asarray(
                 self.m_intermediate['data_derot_angle']
                 )* unit.rad
@@ -566,8 +605,7 @@ class Awarness_fitszilla():
                     continue
             l_feedCoordinatesDict[l_feeds]= l_coordinatesDict.copy()
         #pdb.set_trace()
-        # Apply offset + rotation adjust for every feed
-        # TODO Applicare offset di puntametno da header del file az,el offset
+        # Apply offset + rotation adjust for every feed        
         # rest angle for every feed
         l_feedXOffsets = self.m_intermediate['fe_x_offset']* unit.rad
         l_feedYOffsets = self.m_intermediate['fe_y_offset']* unit.rad

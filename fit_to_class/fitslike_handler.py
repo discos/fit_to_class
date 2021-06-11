@@ -132,12 +132,12 @@ class Fitslike_handler():
         """ output path setter"""
         self.m_outputPath= p_path
         # Output dir creation
-        # try:
-        #     if os.path.exists(self.m_outputPath):
-        #         shutil.rmtree(self.m_outputPath)
-        #     os.mkdir(self.m_outputPath)
-        # except Exception as e:
-        #     self.m_logger.error("Error creating tmp dir {}".format(e))
+        try:
+            if os.path.exists(self.m_outputPath):
+                shutil.rmtree(self.m_outputPath)
+            os.mkdir(self.m_outputPath)
+        except Exception as e:
+            self.m_logger.error("Error creating tmp dir {}".format(e))
 
     def get_summary(self):
         """Getter summary"""
@@ -310,11 +310,11 @@ class Fitslike_handler():
                             self.m_group_on_off_cal[l_feed][l_section]['pols'][l_pol][l_type]= l_gr_table_path
                             joined.write(l_gr_table_path)
                             # Deleting input tables
-                            for input_file in l_table_files:
-                                try:
-                                    os.remove(input_file)
-                                except IOError as e:
-                                    self.m_logger.error("Can't delete intermediate file {} : {}".format(input_file, e))
+                            # for input_file in l_table_files:
+                            #     try:
+                            #         os.remove(input_file)
+                            #     except IOError as e:
+                            #         self.m_logger.error("Can't delete intermediate file {} : {}".format(input_file, e))
                             self.m_logger.info("{}_{}_{}_{}".format(l_feed, l_section, l_pol, l_type))
                             self.m_logger.info("Grouping table into {}".format(l_gr_table_path))
                         except Exception as e:
@@ -563,8 +563,8 @@ class Fitslike_handler():
                         self.m_logger.error("[{}][{}][{}] Exception applying calibration to this data set : {}".format(l_feed,ch,pol,e))                   
                     
         # Delete group data
-        if os.path.exists(self.m_group_path):
-            shutil.rmtree(self.m_group_path, ignore_errors= True)
+        # if os.path.exists(self.m_group_path):
+        #     shutil.rmtree(self.m_group_path, ignore_errors= True)
                         
                     
     def ClassFitsAdaptations(self):
@@ -624,26 +624,49 @@ class Fitslike_handler():
                     calibration_type= ''
                     l_polarization_table= None                                          
                     # ONLY 1 table per pol!
-                    try:
+                    try:                                                             
                         # Data retreiving one level up from 'on' data
                         if 'calibrated' in l_section_pols[pol].keys():
                             calibrated_data_path= l_section_pols[pol]['calibrated']                                
-                            self.m_logger.info("Loading {}".format(calibrated_data_path))
-                            l_polarization_table= QTable.read(calibrated_data_path, memmap= True)
-                            calibration_type= 'calibrated'
-                        elif 'on_off' in l_section_pols[pol].keys():
+                            self.m_logger.info("Loading normalized {}-{}-{} path {}".format(l_feed, l_ch, pol,calibrated_data_path))
+                            if calibrated_data_path: 
+                                l_polarization_table= QTable.read(calibrated_data_path, memmap= True)
+                                calibration_type= 'calibrated'
+                            else:
+                                self.m_logger.info("calibrated for {}-{}-{} is empty".format(l_feed, l_ch, pol))                                    
+                                
+                        if  not l_polarization_table and 'on_off' in l_section_pols[pol].keys():
                             on_off_data_table_path= l_section_pols[pol]['on_off']
-                            self.m_logger.info("Loading {}".format(on_off_data_table_path))
-                            l_polarization_table= QTable.read(on_off_data_table_path, memmap= True)
-                            calibration_type= 'on_off'
-                        elif 'signal' in l_section_pols[pol].keys():
+                            self.m_logger.info("Loading on_off {}-{}-{} path {}".format(l_feed, l_ch, pol,on_off_data_table_path))
+                            if on_off_data_table_path:
+                                l_polarization_table= QTable.read(on_off_data_table_path, memmap= True)
+                                calibration_type= 'on_off'                                
+                            else:
+                                self.m_logger.info("on_off data for {}-{}-{} is empty".format(l_feed, l_ch, pol))    
+                                
+                        if not l_polarization_table and 'signal' in l_section_pols[pol].keys():
                             signal_data_path= l_section_pols[pol]['signal']
-                            self.m_logger.info("Loading {}".format(signal_data_path))
-                            l_polarization_table= QTable.read(signal_data_path, memmap= True)
-                            calibration_type= 'signal'
-                        else:
+                            self.m_logger.info("Loading signal {}-{}-{} path {}".format(l_feed, l_ch, pol,signal_data_path))
+                            if signal_data_path:
+                                l_polarization_table= QTable.read(signal_data_path, memmap= True)
+                                calibration_type= 'signal'
+                            else:
+                                self.m_logger.info("signal data for {}-{}-{} is empty".format(l_feed, l_ch, pol))                                    
+                                
+                        if  not l_polarization_table and 'reference' in l_section_pols[pol].keys():
+                            reference_data_path= l_section_pols[pol]['reference']
+                            self.m_logger.info("Loading reference {}-{}-{} path {}".format(l_feed, l_ch, pol,reference_data_path))
+                            if reference_data_path:
+                                l_polarization_table= QTable.read(reference_data_path, memmap= True)
+                                calibration_type= 'reference'
+                            else:
+                                self.m_logger.info("reference data for {}-{}-{} is empty".format(l_feed, l_ch, pol))                                                                    
+                                
+                        # No available input data options..
+                        if not l_polarization_table:
                             self.m_logger.warning("{}_{}_{} No data suitable for class conversion".format(l_feed, l_ch, pol))
                             continue
+                        
                     except IOError as e:
                         self.m_logger.error("Exception retrieving normalized data from disk tables {}".format(e))
                         continue
@@ -671,9 +694,7 @@ class Fitslike_handler():
                         # ut
                         l_tMjd= l_polarization_table['data_time_mjd']
                         l_timeMjd= Time(l_tMjd, format='mjd', scale='utc')                        
-                        l_class_data['UT']= ( l_tMjd - np.floor(l_tMjd)) * 86400
-                        # Usa questa per ricerca i dati di ingresso dai file di input tramite 'time'
-                        #l_class_data['UT']= l_polarization_table['data_time_mjd']
+                        l_class_data['UT']= ( l_tMjd - np.floor(l_tMjd)) * 86400                        
                         # date
                         l_class_data['DATE-OBS']= l_timeMjd.strftime('%d/%m/%y')
                         # lsts
@@ -683,7 +704,7 @@ class Fitslike_handler():
                         l_lsts= l_lsts.value * unit.hr
                         # infos
                         l_class_data['OBJECT']= l_section['scheduled']['source']
-                        l_class_data['LINE']= "F{}-{:3.3f}"\
+                        l_class_data['LINE']= "F{}-{:3.3f}-MHz"\
                             .format(l_section['frontend']['feed'], l_section['backend']['bandwidth'])
                         self.m_obs_general_data['line']= l_class_data['LINE']
                         try:
@@ -691,7 +712,8 @@ class Fitslike_handler():
                             l_class_data['TELESCOP']=\
                                 self.m_commons.class_telescope_name(l_section,self.m_summary['summary']['backend_name'], pol, l_ch)
                         except ValueError as e:
-                            self.m_logger.error(str(e))
+                            self.m_logger.error("Missing summary !? TELESCOP set to empty value \n Excpetion: "+ str(e))
+                            l_class_data['TELESCOP']= ""
                         l_mH2O= l_polarization_table['weather']
                         l_class_data['MH2O']= l_mH2O
                         # temp
@@ -764,14 +786,19 @@ class Fitslike_handler():
                         try:                            
                             self.classfitsWrite(l_class_path, l_class_table)
                         except ValueError as e:                            
-                            self.m_logger.error("Error writing small classfit table to disk {}".format(e))                                        
+                            self.m_logger.error("Error writing small classfit table to disk {}".format(e))   
+                    except KeyError as e:
+                        self.m_logger.error("[KeyError] Error preparing class data: {}".format(e))                                      
                     except TypeError as e:                        
-                        self.m_logger.error("Error preparing class data: {}".format(e))
+                        self.m_logger.error("[TypeError] Error preparing class data: {}".format(e))
                     except Exception as e:                        
-                        self.m_logger.error("Error preparing class data: {}".format(e))
+                        self.m_logger.error("[Exception] Error preparing class data: {}".format(e))
         # Delete norm data
-        if os.path.exists(self.m_norm_path):
-            shutil.rmtree(self.m_norm_path, ignore_errors= True)
+        # try:
+        #     if os.path.exists(self.m_norm_path) and self.m_norm_path:
+        #         shutil.rmtree(self.m_norm_path, ignore_errors= True)
+        # except Exception as e:
+        #         self.m_logger.error("Error cleaning normalized data folder: {}\n {}\n".format(self.m_norm_path, e))
 
 
     def classfitsWrite(self, p_file_name, p_class_table):
@@ -889,8 +916,8 @@ class Fitslike_handler():
             self.m_logger.error("Exception filling " + p_file_name + " header data: "+ str(e))
         # Disk writing
         try:
-            if os.path.exists(p_file_name):
-                os.remove(p_file_name)
+            #if os.path.exists(p_file_name):
+            #    os.remove(p_file_name)
             l_hdu.writeto(p_file_name)
             self.m_logger.info("Wrote classfits {}".format(p_file_name))
         except Exception as e:            

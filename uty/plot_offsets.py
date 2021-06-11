@@ -45,7 +45,7 @@ if __name__ == "__main__" :
         l_angles_3= Angle(l_cdelt_3* u.rad).arcsec
     # Plot
     fig, axs= plt.subplots(2)
-    fig.suptitle('Az / El offsets from object coordinates (arcsec)')
+    fig.suptitle('Ra Dec offsets from object coordinates (arcsec)')
     axs[0].plot(l_angles_2)
     axs[1].plot(l_angles_3)
     plt.show()

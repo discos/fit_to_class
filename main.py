@@ -39,12 +39,10 @@ def scan(p_path, p_raw, p_scan_type, p_feed, p_files_per_scan):
         l_fh.group_on_off_cal()
         l_fh.ClassFitsAdaptations()
     else:
+        l_fh.group_on_off_cal()
         l_fh.normalize()
         l_fh.ClassFitsAdaptations()
-        # Data to disk
-        l_fh.classfitsWrite('raw')
-        l_fh.classfitsWrite('on_off')
-        l_fh.classfitsWrite('cal')
+
 
 def run():
     global logger

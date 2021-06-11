@@ -30,6 +30,11 @@
 				"obs_dec_offset": ["PRIMARY", "HEADER", "Declination Offset"],
 				"obs_az_offset": ["PRIMARY", "HEADER", "Azimuth Offset"],
 				"obs_el_offset": ["PRIMARY", "HEADER", "Elevation Offset"],
+				"obs_gal_lon_offset": ["PRIMARY", "HEADER", "GalacticLon Offset"],
+				"obs_gal_lat_offset": ["PRIMARY", "HEADER", "GalacticLat Offset"],
+				"obs_user_lat_offset": ["PRIMARY", "HEADER", "UserLatOffset"],
+				"obs_user_lon_offset": ["PRIMARY", "HEADER", "UserLonOffset"],
+				"obs_user_offset_frame": ["PRIMARY", "HEADER", "UserOffsetFrame"],
 				"obs_signal": ["PRIMARY", "HEADER", "SIGNAL"],
 				"obs_scantype": ["PRIMARY", "HEADER", "HIERARCH SubScanType"]
 		    	}		
