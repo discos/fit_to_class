@@ -21,23 +21,33 @@ class ScanOptions:
     def __init__(self, p_logger):
         self.folder="."
         self._output_path=""
+        self.scan_conf_path="."
         self.type= None
         self.feed= 0
         self.raw=False
         self.geometry= None
         self.parallel= 4
         self._errors= False
-        self._logger= p_logger        
+        self._logger= p_logger                
 
 
     def __str__(self):
         return "SCAN OPTIONS:\n" + \
                 "Folder: " + self.folder +"\n"\
                 "Output Path " + self._output_path +"\n"\
+                "Scan option conf path" + self.scan_conf_path + "\n"\
                 "Scan Type: " + ScanOptions.scan_types.get_str_type(self.type) +"\n"\
                 "Geometry: " + str(self.geometry) +"\n"\
                 "Feed: " + str(self.feed) +"\n"\
                 "parallelism: " + str(self.parallel) + "\n"
+
+    # OUTPUT PATH
+
+    def get_output_path(self) -> str:
+        return self._output_path
+
+    def get_errors(self) -> bool:
+        return self._errors
 
     # FOLDER
 
@@ -50,17 +60,25 @@ class ScanOptions:
         if type(p_folder) is not str:            
             raise ValueError("Folder argument shoud be of string type")            
         if not os.path.isdir(p_folder):            
-            raise ValueError("Folder argument shoud be a valid path")
-            return
+            raise ValueError("Folder argument shoud be a valid path")            
         self._folder= p_folder.rstrip('/')      
         tail, head = os.path.split(self._folder)         
         self._output_path= tail+ head+ ScanOptions.output_fname_suffix +'/'          
 
-    def get_output_path(self) -> str:
-        return self._output_path
 
-    def get_errors(self) -> bool:
-        return self._errors
+    # SCAN PIPELINE CONF PATH
+
+    @property
+    def scan_conf_path(self):
+        return self._scan_conf_path
+
+    @scan_conf_path.setter
+    def folder(self, p_path):
+        if type(p_path) is not str:            
+            raise ValueError("Scan conf file path argument shoud be of string type")            
+        if not os.path.isfile(p_path):            
+            raise ValueError("Scan conf file path argument shoud be a valid path")            
+        self._scan_conf_path= p_path        
 
     # SCAN TYPE
 

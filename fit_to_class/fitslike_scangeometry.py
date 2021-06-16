@@ -1,6 +1,19 @@
 
 import re
 
+
+def get_geo_loop_len(p_geo_list) ->int:
+    """
+    Len calc from geo tuples list
+    """
+    sum= 0        
+    for tup in p_geo_list:
+        try:
+            sum= sum + tup[0]
+        except:
+            pass
+    return sum
+
 class ScanGeometry:
     """ 
     Scan Geometry property definition
@@ -74,9 +87,22 @@ class ScanGeometry:
         for tup in self.__geometry:
             if 0 in tup:
                 return False
-            if None in tuple:
+            if None in tup:
                 return False
         return True
+
+    def get_loop_lenght(self) -> int:
+        """
+        Getter geo loop file len
+        It's valid only for non otf scans
+        """
+        sum= 0        
+        for tup in self.__geometry:
+            try:
+                sum= sum + tup[0]
+            except:
+                pass
+        return sum
 
     def _validateGeoElement(self, p_pattern, p_element) -> tuple:
             """
@@ -87,5 +113,5 @@ class ScanGeometry:
             """
             match= re.search(p_pattern, p_element)
             if not match:
-                return (0,None)
+                return (0,None)            
             return (match.group(1), match.group(2))

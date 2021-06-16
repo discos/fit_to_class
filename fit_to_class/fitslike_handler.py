@@ -18,9 +18,10 @@ import pdb
 from fit_to_class import fitslike
 from fit_to_class  import awarness_fitszilla
 from fit_to_class import fitslike_commons
+from fit_to_class import fitslike_scangeometry
 
 
-def _envelope_subscan(p_logger, p_ftype, p_feed, p_inpath, p_outpath) -> dict:
+def _async_subscan(p_logger, p_ftype, p_feed, p_inpath, p_outpath) -> dict:
     """
     Embeds Fitslike subscan parsing
 
@@ -92,7 +93,7 @@ class Fitslike_handler():
         appropriate output conversion module)
     """
 
-    def __init__(self, p_raw, p_scanType, p_feed, p_files_per_scan= 3):
+    def __init__(self, p_raw, p_scan_geometry, p_scanType, p_feed, p_files_per_scan= 3):
         """
         Internal struct definition
 
@@ -101,6 +102,8 @@ class Fitslike_handler():
 
         p_raw : bool
             Avoid grouping data by on off cal
+        p_scan_geometry:
+            List of tuples (N,ON/OFF/CAL)
         p_scanType: string
             Input scan data type
             Nod on off map..
@@ -114,7 +117,11 @@ class Fitslike_handler():
         None.
 
         """
+        self._critical_error= False
         self.m_raw= p_raw
+        self.m_geometry= p_scan_geometry
+        self.m_geometry_scan_list= []
+        self._geo_group_on_off_cal= []
         self.m_files_per_pool= p_files_per_scan
         self.m_commons = fitslike_commons.Fitslike_commons()
         self.m_logger = logging.getLogger(self.m_commons.logger_name())
@@ -143,10 +150,13 @@ class Fitslike_handler():
         """Getter summary"""
         return self.m_summary
 
+    def has_critical_error(self) -> bool:
+        return self._critical_error
+
     def scan_data(self, p_dataDir):
         """
-        Takes data input directory and launchs subscan data conversion
-        to fitslike
+        Takes data input directory and lunchs subscan data conversion
+        to fitslike (intermediate rapresentation)
 
         Parameters
         ----------
@@ -183,7 +193,7 @@ class Fitslike_handler():
             self.m_pool=Pool(l_poolSize)
             for l_fPath in l_group:
                 l_results.append(self.m_pool.apply_async(
-                        _envelope_subscan,
+                        _async_subscan,
                         [self.m_logger,
                         'fitszilla',
                         self.m_feed,
@@ -196,7 +206,52 @@ class Fitslike_handler():
             self.m_subscans= self.m_subscans + [x.get() for x in l_results]
         self.m_logger.info("subscan numbers " + str(len(self.m_subscans)))
 
-    def group_on_off_cal(self):
+    def geometry_group(self):
+        """
+        Group scans by supposed geometry
+        First group is made by file sequence
+        Geometry has fixed number of file for every 
+        """
+        l_loop_len= fitslike_scangeometry.get_geo_loop_len(self.m_geometry)
+        # Subscan filename sorting without the summary file
+        self.m_subscans_geo= sorted( ( f for f in self.m_subscans if 'summary' not in f['file_name']),\
+                                key= lambda item:('file_name' not in item, item.get('file_name', None)))
+        # Ceck if number of scans is multiple of geo file len
+        if len(self.m_subscans_geo) % l_loop_len != 0:
+            self.m_logger.error("we have {} subscans and a geometry loop of {}, MCM criteria not satisfied!".format(len(self.m_subscans_geo), l_loop_len))
+            self.critical_error= True
+            return
+        # Group sorted file by geo loop len        
+        num_geo_groups= len(self.m_subscans_geo) / l_loop_len
+        self.m_logger.info("Grouping subscans in {} repetitions".format(num_geo_groups))
+        self.m_geometry_scan_list= [s.tolist() for s in np.array_split(self.m_subscans_geo, l_loop_len) ]
+        for gr in self.m_geometry_scan_list:
+            self.m_logger.debug("Geometry subscan group :\n{}".format(gr))
+
+    def geometry_check(self):
+        """
+        Step to verify grouped subscans if they fit to given geometry
+        """
+        for gr in self.m_geometry_scan_list:
+            group_geo_on_off_cal= self.group_on_off_cal(gr)
+            check= self._geometry_check_group(group_geo_on_off_cal)
+            if check:
+                self._geo_group_on_off_cal.append(group_geo_on_off_cal)
+            
+
+    def _geometry_check_group(self, p_group_dict) ->bool:
+        """
+        Given a grouped and worked subscan dictionary by on off cal,
+        a check to match geometry is made
+
+        p_group_dict: dict grouper per feed in a single geo loop
+        
+        Returns:
+            True check ok
+        """
+        
+
+    def group_on_off_cal(self, p_group_list= None):
         """
         Creates a new dict for :
             - On
@@ -220,26 +275,29 @@ class Fitslike_handler():
         Output groups are separeted basing on scan type,
         but generally per feed
         """
-
-        # Subscan filename sorting
-        self.m_subscans= sorted(self.m_subscans,\
+        subscan_to_work= None
+        if p_group_list:
+            subscan_to_work= p_group_list
+        else:
+            # Subscan filename sorting
+            self.m_subscans= sorted(self.m_subscans,\
                                 key= lambda item:('file_name' not in item, item.get('file_name', None)))
-
-
-
-        # Subscan data grouping
-        for l_subscan in self.m_subscans:
+            subscan_to_work= self.m_subscans
+                
+                
+        # Recognition and grouping for ON,OFF,CAL
+        for subscan in subscan_to_work:
             l_file_name= ''
-            if 'file_name' in l_subscan:
-                l_file_name= l_subscan['file_name']
+            if 'file_name' in subscan:
+                l_file_name= subscan['file_name']
                 self.m_logger.info(l_file_name)
             # Summary file doesn't group
-            if 'summary' in l_subscan.keys():
-                self.m_summary= l_subscan
+            if 'summary' in subscan.keys():
+                self.m_summary= subscan
                 self.m_logger.info("summary.fits excluded from on off cal")
                 continue
             # Analyzing every subscan
-            for l_feed in l_subscan:
+            for l_feed in subscan:
                 # Work only selected feed
                 if self.m_feed:
                     if not self.m_feed in str(l_feed):
@@ -248,10 +306,10 @@ class Fitslike_handler():
                 if l_feed not in self.m_group_on_off_cal.keys():
                     self.m_group_on_off_cal[l_feed]={}
                 # Section (l_chx) navigation
-                for l_chx in l_subscan[l_feed]:
+                for l_chx in subscan[l_feed]:
                     if 'ch_' not in l_chx:
                         continue
-                    l_chObj= l_subscan[l_feed][l_chx]
+                    l_chObj= subscan[l_feed][l_chx]
                     # on off group keys hierarchy
                     if l_chx not in self.m_group_on_off_cal[l_feed].keys():
                         # replicate section data to group on off cal to retrieve them easely

@@ -41,6 +41,8 @@ def run():
     parser.add_argument("-r", "--raw", help= "Avoid grouping data by on off cal, convert all data in raw mode", action= "store_true")
     # Computing oprions
     parser.add_argument("-p", "--parallels", help= "How many input file parsed at a time", type= int, default= 4)
+    # Pipeline conf file
+    parser.add_argument("-s", "--scanconf", help="Pipeline json conf file path" , type= str, default= ".")    
     # Parsing
     args= parser.parse_args()
     
@@ -51,6 +53,7 @@ def run():
         scan_options.type= args.type
         scan_options.geometry= args.geometry
         scan_options.parallel= args.parallels
+        scan_options.scan_conf_path= args.scanconf
     except ValueError as e:
         l_logger.error("Got wrong input parameter :\n" + str(e))
 
