@@ -1,15 +1,26 @@
-import sys
+import pdb
 import json
-from typing import List
+from enum import Enum
 from fit_to_class import fitslike_handler
 from fit_to_class import fitslike_commons
 import scanoptions
 
 
+class PipelineTasks(Enum):
+    """ Pipeline enum tasks """
+    FITSLIKE_HANDLER= "fitslike_handler"
+    SUBSCAN_PARSING= "subscan_parsing"
+    GEOMETRY_GROUPING= "geomertry_grouping"
+    SIGNAL_GROUPING= "signal_grouping"
+    DATA_CALIBRATION= "data_calibration"
+    CLASSFITS_CONVERSION ="classfit_conversion"
+
 class ScanPipeline:
     """
     Scan sequence pipeline
     """
+    # ENUM
+    FITSLIKE_HANDLER= "fitslike_handler"
 
     # PUBLIC
 
@@ -25,6 +36,7 @@ class ScanPipeline:
         self._scan_context= {}
         self._pipeline_errors= False
 
+
     def set_scan_options(self, p_options) -> None:
         """ 
         Setter scan options
@@ -35,14 +47,13 @@ class ScanPipeline:
             return
         self._scan_options= p_options
         # Read and parse scan conf file
-        self._read_scan_conf()
-        self._parse_scan_conf()
+        self._conf_read()        
         # Build pipeline
         self._pipeline_build()
         # Print pipeline 
         self._pipeline_print()
 
-    def scan(self) -> None:
+    def pipeline_start(self) -> None:
         """
         Working pipeline         
         """        
@@ -59,7 +70,7 @@ class ScanPipeline:
                 return
             # Task reading
             task_enabled= self._pipeline_task_is_enabled(task)
-            self._logger.info("Pipeline::{} enabled:{}".format(self._pipeline_task_name(task)))
+            #self._logger.info("enabled:{} - {}".format(self._task_is_enabled(task), self._pipeline_task_name(task)))
             if not task_enabled:
                 continue
             # Task execution
@@ -77,56 +88,57 @@ class ScanPipeline:
         """
         _list=[]
         # Fitslike handler 
-        _list.append(( "fitslike",
+        _list.append(( PipelineTasks.FITSLIKE_HANDLER,
                     {     
                         "task": self._pipeline_fitslike_handler,
                         "enabled" : False
                     })
         )
         # File scan
-        _list.append(( "scan",
+        _list.append(( PipelineTasks.SUBSCAN_PARSING,
                     {                    
                         "task": self._pipeline_scan_data,
                         "enabled" : False
                     })
         )
         # Geometry grouping
-        _list.append(("geometry",
+        _list.append((PipelineTasks.GEOMETRY_GROUPING,
                     {
                         "task": self._pipeline_geometry_grouping,
                         "enabled" : False
                     })
         )
         # Signal reference grouping        
-        _list.append(("on_off",
+        _list.append((PipelineTasks.SIGNAL_GROUPING,
                     {         
                         "task": self._pipeline_signal_grouping,
                         "enabled" : False
                     })
         )
         # Normalize values
-        _list.append(("normalize",
+        _list.append((PipelineTasks.DATA_CALIBRATION,
                     {            
                         "task": self._pipeline_fitslike_handler,
                         "enabled" : False
                     })
         )
         # Classfits conversion
-        _list.append(("classfits",
+        _list.append((PipelineTasks.CLASSFITS_CONVERSION,
                     {                    
                         "task": self._pipeline_classfits,
                         "enabled" : False
                     })
-        )
+        )        
         return _list
 
     def _pipeline_find_task(self, p_name) ->dict:
         """
         Task look up from all task list
         """
-        _task_name= str(p_name)
+        _task_name= p_name
+        #pdb.set_trace()
         for tup in self._pipeline_task_list:
-            if _task_name in tup[0]:
+            if _task_name == tup[0]:
                 return tup[1]
         return None
 
@@ -158,61 +170,61 @@ class ScanPipeline:
         """
         self._scan_pipeline=[]        
         # Fitsklike handler, mandatory
-        _task_ft= self._pipeline_find_task("fitliske")
+        _task_ft= self._pipeline_find_task(PipelineTasks.FITSLIKE_HANDLER)        
         if _task_ft:            
-            _enabled= self._conf_task_is_enabled("fitslike")
+            _enabled= self._conf_task_is_enabled(PipelineTasks.FITSLIKE_HANDLER)
             if _enabled: 
-                self._pipeline_task_set_enabled(_task_ft)
-            self._scan_pipeline.append(_task_ft)            
+                self._pipeline_task_set_enabled(_task_ft)            
+            self._scan_pipeline.append(_task_ft)                        
         # Scan files, mandatory
-        _task_scan= self._pipeline_find_task("scan")        
+        _task_scan= self._pipeline_find_task(PipelineTasks.SUBSCAN_PARSING)        
         if _task_scan:
-            _enabled= self._conf_task_is_enabled("scan")
+            _enabled= self._conf_task_is_enabled(PipelineTasks.SUBSCAN_PARSING)
             if _enabled: 
                 self._pipeline_task_set_enabled(_task_scan)
             self._scan_pipeline.append(_task_scan) 
         # First branch, raw
         if self._scan_options.raw:
             # Signal ref grouping
-            _task_signal= self._pipeline_find_task("on_off")
+            _task_signal= self._pipeline_find_task(PipelineTasks.SIGNAL_GROUPING)
             if _task_signal:
-                _enabled= self._conf_task_is_enabled("on_off")
+                _enabled= self._conf_task_is_enabled(PipelineTasks.SIGNAL_GROUPING)
                 if _enabled: 
                     self._pipeline_task_set_enabled(_task_signal)
                 self._scan_pipeline.append(_task_signal) 
             # Classfits conversion
-            _task_classfits= self._pipeline_find_task("classifits")
+            _task_classfits= self._pipeline_find_task(PipelineTasks.CLASSFITS_CONVERSION)
             if _task_classfits:
-                _enabled= self._conf_task_is_enabled("classfits")
+                _enabled= self._conf_task_is_enabled(PipelineTasks.CLASSFITS_CONVERSION)
                 if _enabled: 
                     self._pipeline_task_set_enabled(_task_classfits)
                 self._scan_pipeline.append(_task_classfits) 
         else:
             # Geometry grouping
-            _task_geo= self._pipeline_find_task("geometry")
+            _task_geo= self._pipeline_find_task(PipelineTasks.GEOMETRY_GROUPING)
             if _task_geo:
-                _enabled= self._conf_task_is_enabled("geometry")
+                _enabled= self._conf_task_is_enabled(PipelineTasks.GEOMETRY_GROUPING)
                 if _enabled: 
                     self._pipeline_task_set_enabled(_task_geo)
                 self._scan_pipeline.append(_task_geo) 
             # Signal ref grouping
-            _task_signal= self._pipeline_find_task("on_off")
+            _task_signal= self._pipeline_find_task(PipelineTasks.SIGNAL_GROUPING)
             if _task_signal:
-                _enabled= self._conf_task_is_enabled("on_off")
+                _enabled= self._conf_task_is_enabled(PipelineTasks.SIGNAL_GROUPING)
                 if _enabled: 
                     self._pipeline_task_set_enabled(_task_signal)
                 self._scan_pipeline.append(_task_signal) 
             # Data normalization
-            _task_norm= self._pipeline_find_task("normalize")
+            _task_norm= self._pipeline_find_task(PipelineTasks.DATA_CALIBRATION)
             if _task_norm:
-                _enabled= self._conf_task_is_enabled("normalize")
+                _enabled= self._conf_task_is_enabled(PipelineTasks.DATA_CALIBRATION)
                 if _enabled: 
                     self._pipeline_task_set_enabled(_task_norm)
                 self._scan_pipeline.append(_task_norm) 
             # Classfits conversion
-            _task_classfits= self._pipeline_find_task("classifits")
+            _task_classfits= self._pipeline_find_task(PipelineTasks.CLASSFITS_CONVERSION)
             if _task_classfits:
-                _enabled= self._conf_task_is_enabled("classfits")
+                _enabled= self._conf_task_is_enabled(PipelineTasks.CLASSFITS_CONVERSION)
                 if _enabled: 
                     self._pipeline_task_set_enabled(_task_classfits)
                 self._scan_pipeline.append(_task_classfits) 
@@ -257,10 +269,12 @@ class ScanPipeline:
     def _pipeline_task_execute(self, p_task) -> None:
         _key= "task"
         if type(p_task) is not dict:
+            self._logger.error("Given task in not a dict!")
+            self._pipeline_errors= True
             return False
         if _key in p_task:
             try:
-                p_task[_key]()
+                p_task[_key](self._scan_context)
             except Exception as e:                
                 self._logger.error("Error on task {}:\n {}".format(self._pipeline_task_name(p_task), str(e)))
                 self._pipeline_errors= True
@@ -274,6 +288,7 @@ class ScanPipeline:
         """
         Cleaning pipeline operations 
         """
+        self._logger.info("PIPELINE CLOSING\n")
 
     # PIPELINE TASKS
 
@@ -284,7 +299,14 @@ class ScanPipeline:
 
         p_scan_contex: dict, pipeline data
         """
-
+        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.FITSLIKE_HANDLER))
+        _fh= fitslike_handler.Fitslike_handler( self._scan_options.raw,\
+                    self._scan_options.geometry,\
+                    self._scan_options.type,\
+                    self._scan_options.feed,\
+                    self._scan_options.parallel)   
+        _fh.setOutputPath(self._scan_options.get_output_path())
+        p_scan_context['fh']= _fh
 
     def _pipeline_scan_data(self, p_scan_context) -> None:
         """
@@ -293,7 +315,12 @@ class ScanPipeline:
 
         p_scan_contex: dict, pipeline data
         """
-
+        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.SUBSCAN_PARSING))
+        try:
+            _fh= p_scan_context['fh']
+            _fh.scan_data(self._scan_options.folder)
+        except Exception as e:
+            self._logger.error(f"Exception on task execution {str(e)}")
     
     def _pipeline_geometry_grouping(self, p_scan_context) -> None:
         """
@@ -302,6 +329,7 @@ class ScanPipeline:
 
         p_scan_contex: dict, pipeline data
         """
+        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.GEOMETRY_GROUPING))
 
     def _pipeline_signal_grouping(self, p_scan_context) -> None:
         """
@@ -314,6 +342,7 @@ class ScanPipeline:
 
         p_scan_contex: dict, pipeline data
         """
+        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.SIGNAL_GROUPING))
 
     def _pipeline_normalize(self,p_scan_context) -> None:
         """
@@ -322,6 +351,7 @@ class ScanPipeline:
 
         p_scan_contex: dict, pipeline data
         """
+        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.DATA_CALIBRATION))
     
     def _pipeline_classfits(self,p_scan_context) -> None:
         """
@@ -330,6 +360,7 @@ class ScanPipeline:
 
         p_scan_contex: dict, pipeline data
         """
+        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.CLASSFITS_CONVERSION))
 
     # UTY 
                         
@@ -342,31 +373,58 @@ class ScanPipeline:
             },
             ...
         }
-        """
+        """        
         try:
             conf_file= open(self._scan_options.scan_conf_path,)
-            self._conf_json= json.loads(conf_file)
+            self._conf_json= json.loads(conf_file.read())
             conf_file.close()
         except Exception as e:
-            self._logger.error("Exceptin reading pipeline conf file:\n {}".format(str(e)))
-
+            self._logger.error("Exception reading pipeline conf file: {} \n {}".\
+                format(self._scan_options.scan_conf_path, str(e)))
+            self._pipeline_errors= True
+        finally:
+            self._logger.info(f"\nPipeline task configuration:\n {json.dumps(self._conf_json, indent= 2, separators=(',', ':'))}\n")
+            
     def _conf_parse(self):
         """
         Parsing scan conf dictionary
         Enable / disable pipeline steps
         """
+        pass
 
     def _conf_task_is_enabled(self, p_task_name) -> bool:
         """
         Check if given taskname is enabled
         """
-        _task_name= str(p_task_name)
-        _key= "enabled"
+        _task_name= p_task_name.value
+        _key= "enabled"        
         if _task_name in self._conf_json:
-            if _key in self.conf_json[_task_name]:
-                return self.conf_json[_task_name][_key]
+            if _key in self._conf_json[_task_name]:
+                return self._conf_json[_task_name][_key]
         return False
+    
+    def _task_is_enabled(self, p_task) -> bool:
+        """
+        Return if the pipleine task is enabled
+        """
+        if type(p_task) is not dict:
+            self._pipeline_errors= True
+            self._logger.error(f"Given object is not a pipeline task dict!")
+            return  False
+        _key= "enabled"
+        if _key not in p_task:
+            self._pipeline_errors= True
+            self._logger.error(f"Given pipeline task enabled key missing!")
+            return False
+        return p_task[_key]
 
     def _pipeline_print(self) -> None:
         """ Print pipeline """
-        print(json.dumps(self._scan_pipeline))
+        _active_task_cnt= 0        
+        _body=""        
+        for task in self._scan_pipeline:
+            if self._task_is_enabled(task):
+                _body = _body + f"{task['task'].__name__}\n"
+                _active_task_cnt= _active_task_cnt +1
+        _title= f"\nPIPELINE EXECUTION LIST ({_active_task_cnt} items):\n"
+        self._logger.info(_title + _body)

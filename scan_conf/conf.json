@@ -1,0 +1,25 @@
+{
+    "fitslike_handler":{
+        "enabled": true
+    },
+
+    "subscan_parsing":{
+        "enabled": true
+    },
+
+    "geomertry_grouping":{
+        "enabled": false
+    },
+
+    "signal_grouping":{
+        "enabled": false
+    },
+
+    "data_calibration":{
+        "enabled": false
+    },
+
+    "classfit_conversion":{
+        "enabled": false
+    }
+}

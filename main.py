@@ -42,7 +42,7 @@ def run():
     # Computing oprions
     parser.add_argument("-p", "--parallels", help= "How many input file parsed at a time", type= int, default= 4)
     # Pipeline conf file
-    parser.add_argument("-s", "--scanconf", help="Pipeline json conf file path" , type= str, default= ".")    
+    parser.add_argument("-s", "--scanconf", help="Pipeline json conf file path" , type= str, default= "scan_conf/conf.json")    
     # Parsing
     args= parser.parse_args()
     
@@ -57,12 +57,12 @@ def run():
     except ValueError as e:
         l_logger.error("Got wrong input parameter :\n" + str(e))
 
-    l_logger.info(scan_options)
+    l_logger.info("\n" + str(scan_options))
     
     # Scan pipeline
     pipeline= scanpipeline.ScanPipeline(l_logger)
     pipeline.set_scan_options(scan_options)
-    pipeline.scan()
+    pipeline.pipeline_start()
     
 
 

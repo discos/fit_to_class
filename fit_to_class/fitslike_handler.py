@@ -237,7 +237,8 @@ class Fitslike_handler():
             check= self._geometry_check_group(group_geo_on_off_cal)
             if check:
                 self._geo_group_on_off_cal.append(group_geo_on_off_cal)
-            
+        # Debug        
+        self.m_logger.debug("Geometry groups by loop lenght:\n {}".format(self._geo_group_on_off_cal))
 
     def _geometry_check_group(self, p_group_dict) ->bool:
         """

@@ -21,7 +21,7 @@ class ScanOptions:
     def __init__(self, p_logger):
         self.folder="."
         self._output_path=""
-        self.scan_conf_path="."
+        self.scan_conf_path=""
         self.type= None
         self.feed= 0
         self.raw=False
@@ -73,9 +73,12 @@ class ScanOptions:
         return self._scan_conf_path
 
     @scan_conf_path.setter
-    def folder(self, p_path):
+    def scan_conf_path(self, p_path):
         if type(p_path) is not str:            
-            raise ValueError("Scan conf file path argument shoud be of string type")            
+            raise ValueError("Scan conf file path argument shoud be of string type")       
+        if not p_path:
+            self._scan_conf_path= p_path
+            return
         if not os.path.isfile(p_path):            
             raise ValueError("Scan conf file path argument shoud be a valid path")            
         self._scan_conf_path= p_path        
