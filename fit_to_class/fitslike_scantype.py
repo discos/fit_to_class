@@ -1,19 +1,23 @@
-class ScanType:
-    """
-    Scan types
-    """
+from enum import Enum
+
+class ScanTypes(Enum):
     NOTVALID=0
     ONOFF= 1
     NODDING= 2
     OTF= 3
     RASTER = 4
 
+class ScanType:
+    """
+    Scan types
+    """    
+
     def __init__(self):
         self.__types= {}
-        self.__types["ONOFF"] = ScanType.ONOFF
-        self.__types["NODDING"] = ScanType.NODDING
-        self.__types["OTF"] = ScanType.OTF
-        self.__types["RASTER"]= ScanType.RASTER
+        self.__types["ONOFF"] = ScanTypes.ONOFF
+        self.__types["NODDING"] = ScanTypes.NODDING
+        self.__types["OTF"] = ScanTypes.OTF
+        self.__types["RASTER"]= ScanTypes.RASTER
     
     def get_types(self) -> list:
         """ Getter available string values"""
@@ -26,7 +30,7 @@ class ScanType:
         try:
             return self.__types[p_type_str]
         except:
-            return ScanType.NOTVALID
+            return ScanTypes.NOTVALID
 
     def get_str_type(self, p_type) -> str:
         for key, value in self.__types.items():

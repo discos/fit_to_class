@@ -103,7 +103,7 @@ class ScanOptions:
     def geometry(self, p_geometry_str):
         if not ScanOptions.scan_geometry.parse(p_geometry_str):
             raise ValueError("Invalid geometry format or values")            
-        self._geometry= ScanOptions.scan_geometry.get_geometry()
+        self._geometry= ScanOptions.scan_geometry
 
     # RAW SCAN
 

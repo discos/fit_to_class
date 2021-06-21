@@ -1,4 +1,5 @@
 
+import pdb
 import re
 
 
@@ -91,15 +92,15 @@ class ScanGeometry:
                 return False
         return True
 
-    def get_loop_lenght(self) -> int:
+    def get_loop_len(self) -> int:
         """
         Getter geo loop file len
         It's valid only for non otf scans
         """
-        sum= 0        
+        sum= 0                
         for tup in self.__geometry:
             try:
-                sum= sum + tup[0]
+                sum= sum + int(tup[0])
             except:
                 pass
         return sum

@@ -203,6 +203,7 @@ class Fitslike_handler():
                     )
             self.m_pool.close()
             self.m_pool.join()
+            # Adding new data to subscan data list
             self.m_subscans= self.m_subscans + [x.get() for x in l_results]
         self.m_logger.info("subscan numbers " + str(len(self.m_subscans)))
 

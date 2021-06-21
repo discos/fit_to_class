@@ -1,13 +1,17 @@
 {
+    "subscan_list":{
+        "enabled": true
+    },
+
+    "geomertry_grouping":{
+        "enabled": true
+    },
+
     "fitslike_handler":{
         "enabled": true
     },
 
     "subscan_parsing":{
-        "enabled": true
-    },
-
-    "geomertry_grouping":{
         "enabled": false
     },
 

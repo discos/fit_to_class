@@ -1,13 +1,18 @@
 import pdb
+import os
+import shutil
 import json
+import numpy as np
 from enum import Enum
 from fit_to_class import fitslike_handler
 from fit_to_class import fitslike_commons
+from fit_to_class.fitslike_scantype import ScanType
+from fit_to_class.fitslike_scantype import ScanTypes
 import scanoptions
-
 
 class PipelineTasks(Enum):
     """ Pipeline enum tasks """
+    SUBSCAN_LIST= "subscan_list"
     FITSLIKE_HANDLER= "fitslike_handler"
     SUBSCAN_PARSING= "subscan_parsing"
     GEOMETRY_GROUPING= "geomertry_grouping"
@@ -35,6 +40,10 @@ class ScanPipeline:
         self._scan_pipeline= []
         self._scan_context= {}
         self._pipeline_errors= False
+        self._scan_list= {
+            'summary': '',
+            'subscan': []
+        }
 
 
     def set_scan_options(self, p_options) -> None:
@@ -87,6 +96,20 @@ class ScanPipeline:
         [(name, task dict),(name, task dict),..]
         """
         _list=[]
+        # Filter subscan folder
+        _list.append(( PipelineTasks.SUBSCAN_LIST,
+                    {     
+                        "task": self._pipeline_subscan_list,
+                        "enabled" : False
+                    })
+        )
+        # Geometry grouping
+        _list.append((PipelineTasks.GEOMETRY_GROUPING,
+                    {
+                        "task": self._pipeline_geometry_grouping,
+                        "enabled" : False
+                    })
+        )
         # Fitslike handler 
         _list.append(( PipelineTasks.FITSLIKE_HANDLER,
                     {     
@@ -100,14 +123,7 @@ class ScanPipeline:
                         "task": self._pipeline_scan_data,
                         "enabled" : False
                     })
-        )
-        # Geometry grouping
-        _list.append((PipelineTasks.GEOMETRY_GROUPING,
-                    {
-                        "task": self._pipeline_geometry_grouping,
-                        "enabled" : False
-                    })
-        )
+        )        
         # Signal reference grouping        
         _list.append((PipelineTasks.SIGNAL_GROUPING,
                     {         
@@ -169,6 +185,22 @@ class ScanPipeline:
 
         """
         self._scan_pipeline=[]        
+        # Subscan folder filter, mandatory
+        _task_sublist= self._pipeline_find_task(PipelineTasks.SUBSCAN_LIST)        
+        if _task_sublist:            
+            _enabled= self._conf_task_is_enabled(PipelineTasks.SUBSCAN_LIST)
+            if _enabled: 
+                self._pipeline_task_set_enabled(_task_sublist)            
+            self._scan_pipeline.append(_task_sublist)    
+        if self._scan_options._type == ScanTypes.ONOFF or\
+            self._scan_options._type == ScanTypes.NODDING:
+            # Geometry grouping
+            _task_geo= self._pipeline_find_task(PipelineTasks.GEOMETRY_GROUPING)
+            if _task_geo:
+                _enabled= self._conf_task_is_enabled(PipelineTasks.GEOMETRY_GROUPING)
+                if _enabled: 
+                    self._pipeline_task_set_enabled(_task_geo)
+                self._scan_pipeline.append(_task_geo)
         # Fitsklike handler, mandatory
         _task_ft= self._pipeline_find_task(PipelineTasks.FITSLIKE_HANDLER)        
         if _task_ft:            
@@ -199,14 +231,7 @@ class ScanPipeline:
                 if _enabled: 
                     self._pipeline_task_set_enabled(_task_classfits)
                 self._scan_pipeline.append(_task_classfits) 
-        else:
-            # Geometry grouping
-            _task_geo= self._pipeline_find_task(PipelineTasks.GEOMETRY_GROUPING)
-            if _task_geo:
-                _enabled= self._conf_task_is_enabled(PipelineTasks.GEOMETRY_GROUPING)
-                if _enabled: 
-                    self._pipeline_task_set_enabled(_task_geo)
-                self._scan_pipeline.append(_task_geo) 
+        else:             
             # Signal ref grouping
             _task_signal= self._pipeline_find_task(PipelineTasks.SIGNAL_GROUPING)
             if _task_signal:
@@ -292,6 +317,57 @@ class ScanPipeline:
 
     # PIPELINE TASKS
 
+    def _pipeline_subscan_list(self, p_scan_context) -> None:
+        """
+        Scan list first file look up
+        It prepares master scan list
+        _scan_list= {
+            'summary': summary_file
+            'subscan': [scubscan file list]
+        }
+        """
+        folder= self._scan_options.folder
+        files_fits= [f for f in os.listdir(folder) if f.endswith('.fits')]
+        self._scan_list['summary']= [f for f in files_fits if 'summary' in f]
+        # Summary check if exists (it has to be one only)
+        if  not self._scan_list['summary']:
+            self._logger.error(f"Missing summary.fits from {folder}")
+            self._pipeline_errors= True
+            return
+        # Summary, from list to single file
+        self._scan_list['summary']= self._scan_list['summary'][0]
+        # Subscans
+        self._scan_list['subscan']= [f for f in files_fits if 'summary' not in f]
+        # Print
+        self._subscan_list_print()
+                
+    def _pipeline_geometry_grouping(self, p_scan_context) -> None:
+        """
+        Subscan group by geometry definitions
+        Raise exception if errors
+
+        p_scan_contex: dict, pipeline data
+        """
+        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.GEOMETRY_GROUPING))
+        # TODO Leggere i file dalla folder e sapararli secondo geometria,
+        # Dovrebbe essere possibile passare i singoli gruppi allo scan di FH 
+        _subcan_len= len(self._scan_list['subscan'])
+        _geo_loop_len= self._scan_options.geometry.get_loop_len()        
+        _mod= _subcan_len % _geo_loop_len        
+        if _mod != 0:
+            self._logger.error(f"Unexpected susbcan number, cannot gorup by given geometry:\n"\
+                + f"Total subscan number: {_subcan_len}\n"\
+                + f"Geomtry single group len: {_geo_loop_len}\n"\
+                + f"MOD is not zero: {_mod}")
+            self._pipeline_errors= True
+            return
+        # Ok subscan files number fits geo length
+        _geo_group_num= _subcan_len / _geo_loop_len
+        self._scan_list= [g.tolist() for g in np.array_split(self._scan_list, _geo_group_num)]
+        # Print geo groups
+        self._subscan_list_print()
+
+
     def _pipeline_fitslike_handler(self, p_scan_context) -> None:
         """
         Creates fitlike handler 
@@ -307,7 +383,7 @@ class ScanPipeline:
                     self._scan_options.parallel)   
         _fh.setOutputPath(self._scan_options.get_output_path())
         p_scan_context['fh']= _fh
-
+    
     def _pipeline_scan_data(self, p_scan_context) -> None:
         """
         File scan operations
@@ -321,16 +397,7 @@ class ScanPipeline:
             _fh.scan_data(self._scan_options.folder)
         except Exception as e:
             self._logger.error(f"Exception on task execution {str(e)}")
-    
-    def _pipeline_geometry_grouping(self, p_scan_context) -> None:
-        """
-        Subscan group by geometry definitions
-        Raise exception if errors
-
-        p_scan_contex: dict, pipeline data
-        """
-        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.GEOMETRY_GROUPING))
-
+        
     def _pipeline_signal_grouping(self, p_scan_context) -> None:
         """
         Subscan find on off and cal inside geometry groups or
@@ -428,3 +495,20 @@ class ScanPipeline:
                 _active_task_cnt= _active_task_cnt +1
         _title= f"\nPIPELINE EXECUTION LIST ({_active_task_cnt} items):\n"
         self._logger.info(_title + _body)
+
+    def _subscan_list_print(self) -> None:
+        """ Print input file list """
+        # Print file list
+        self._logger.info("\nSUSBCAN FILE LIST:")
+        self._logger.info(f"Summary: {self._scan_list['summary']}")
+        _cnt= 0
+        for f in self._scan_list['subscan']:
+            if type(f) is list:
+                self._logger.info("Geometry group:")
+                for ff in f:
+                    _cnt= _cnt +1            
+                    self._logger.debug(f" Subscan {_cnt}: {f}f")
+            else:
+                _cnt= _cnt +1            
+                self._logger.debug(f"Subscan {_cnt}: {f}")            
+        self._logger.info(f"Subscan files : {_cnt}")
