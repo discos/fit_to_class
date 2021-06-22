@@ -12,7 +12,7 @@
     },
 
     "subscan_parsing":{
-        "enabled": false
+        "enabled": true
     },
 
     "signal_grouping":{

@@ -41,15 +41,14 @@ def _async_subscan(p_logger, p_ftype, p_feed, p_inpath, p_outpath) -> dict:
 
     """
     "todo comporre il parsing attraverso il fitslike ?"
-    p_logger.info("Scanning " + p_inpath)
-    l_path, l_filename= os.path.split(p_inpath)
-    p_logger.info("fitszilla parsing: " + p_inpath)
+    _path, _filename= os.path.split(p_inpath)
+    p_logger.info("Scanning " + _filename)        
     try:
         l_fits = fits.open(p_inpath)
-    except Exception as e:
-        p_logger.error("Skipping input file {} due to an excpetion: \n{}".format(p_inpath, e))
+    except Exception as e:        
+        p_logger.error(f"Skipping input file {_filename} due to an excpetion: \n{str(e)}")
         return {}
-    l_aware= awarness_fitszilla.Awarness_fitszilla(l_fits, p_inpath, l_filename , p_feed)
+    l_aware= awarness_fitszilla.Awarness_fitszilla(l_fits, p_inpath, _filename , p_feed)
     l_aware.setOutputPath(p_outpath)
     l_aware.parse()
     l_repr= l_aware.process()
@@ -59,7 +58,7 @@ def _async_subscan(p_logger, p_ftype, p_feed, p_inpath, p_outpath) -> dict:
     l_aware = None
     l_fits =None
     l_repr= l_fitslike.get_inputRepr()
-    l_repr['file_name']= l_filename
+    l_repr['file_name']= _filename
     l_repr['errors']= l_errors
     for er in l_errors:
         p_logger.error(er)
@@ -153,58 +152,48 @@ class Fitslike_handler():
     def has_critical_error(self) -> bool:
         return self._critical_error
 
-    def scan_data(self, p_dataDir):
+    def scan_data(self, p_subscan_list) -> None:
         """
         Takes data input directory and lunchs subscan data conversion
         to fitslike (intermediate rapresentation)
 
         Parameters
         ----------
-        p_dataDir : string
-            Input data directory path
-
-        Returns
-        -------
-        None.
-
-        """
-        global g_subscans
-
-        def chunker(p_seq, p_size):
-            return (p_seq[pos:pos + p_size] for pos in range(0,len(p_seq), p_size))
-
-        # Parsing dir
-        self.m_dataDir = p_dataDir
-        if not os.path.isdir(p_dataDir):
-            self.m_logger.error("Input data dir is not valid")
-            return
-        # Processing
-        l_filt= self.m_commons.filter_input_files(self.m_inputType)
-        l_inputFiles= []
-        for item in os.listdir(self.m_dataDir):
-            if os.path.isfile(os.path.join(self.m_dataDir,item)):
-                l_inputFiles.append(item)
-        l_inputFiles= [f for f in l_inputFiles if re.match(l_filt,f)]
+        p_subscan_list : dict
+            {
+                'summary': summary_file
+                'subscan': subcan_list(with inner list made after geo grouping)
+            }
+        """                
+        # TODO VERIFCARE CHE SIA CORRETTO
+        # Input files
+        _summary= p_subscan_list['summary']        
+        _subscans= p_subscan_list['subscan']        
         # Split parsing multiprocessing
         self.m_results=[]
-        l_poolSize= self.m_files_per_pool
-        for l_group in chunker(l_inputFiles, l_poolSize ):
-            l_results=[]
-            self.m_pool=Pool(l_poolSize)
-            for l_fPath in l_group:
-                l_results.append(self.m_pool.apply_async(
+        _poolSize= self.m_files_per_pool
+        # Split subscan sublist in pools if presents
+        _subscans_sublist= [s.tolist() for s in np.array_split(_subscans, _poolSize)]
+        for _group in _subscans_sublist:
+            _results=[]
+            self.m_pool=Pool(_poolSize)
+            for _scan in _group:
+                _results.append(self.m_pool.apply_async(
                         _async_subscan,
                         [self.m_logger,
                         'fitszilla',
                         self.m_feed,
-                        p_dataDir +'/'+ l_fPath,
+                        _scan,
                         self.m_outputPath
                         ])
                     )
             self.m_pool.close()
             self.m_pool.join()
             # Adding new data to subscan data list
-            self.m_subscans= self.m_subscans + [x.get() for x in l_results]
+            self.m_subscans.append( [x.get() for x in _results] )
+        # Summary parsing on its own        
+        self.m_subscans.append(_async_subscan(self.m_logger, 'fitszilla', self.m_feed, _summary, self.m_outputPath))
+        # 
         self.m_logger.info("subscan numbers " + str(len(self.m_subscans)))
 
     def geometry_group(self):

@@ -1,6 +1,9 @@
 import pdb
 import os
+import sys
 import shutil
+import traceback
+import inspect
 import json
 import numpy as np
 from enum import Enum
@@ -44,6 +47,7 @@ class ScanPipeline:
             'summary': '',
             'subscan': []
         }
+        self._scan_list_group= []
 
 
     def set_scan_options(self, p_options) -> None:
@@ -85,7 +89,7 @@ class ScanPipeline:
             # Task execution
             self._pipeline_task_execute(task)
         # Closing
-        self._logger.info("Closing pipeline")
+        #self._logger.info("Closing pipeline")
         self._pipeline_close()             
 
     # BUILD PIPELINE
@@ -96,6 +100,11 @@ class ScanPipeline:
         [(name, task dict),(name, task dict),..]
         """
         _list=[]
+        self._scan_list= {
+            'summary': '',
+            'subscan': []
+        }
+        self._scan_list_group= []
         # Filter subscan folder
         _list.append(( PipelineTasks.SUBSCAN_LIST,
                     {     
@@ -300,10 +309,12 @@ class ScanPipeline:
         if _key in p_task:
             try:
                 p_task[_key](self._scan_context)
-            except Exception as e:                
+            except Exception as e:                                
                 self._logger.error("Error on task {}:\n {}".format(self._pipeline_task_name(p_task), str(e)))
+                _exc_info= sys.exc_info()
+                traceback.print_exc(*_exc_info)
                 self._pipeline_errors= True
-            finally:
+            finally:                
                 return
         # Unknwon task
         self._logger.error("Cannot execute task {}".format(self._pipeline_task_name(p_task)))
@@ -327,7 +338,7 @@ class ScanPipeline:
         }
         """
         folder= self._scan_options.folder
-        files_fits= [f for f in os.listdir(folder) if f.endswith('.fits')]
+        files_fits= [os.path.join(folder,f) for f in os.listdir(folder) if f.endswith('.fits')]
         self._scan_list['summary']= [f for f in files_fits if 'summary' in f]
         # Summary check if exists (it has to be one only)
         if  not self._scan_list['summary']:
@@ -339,7 +350,7 @@ class ScanPipeline:
         # Subscans
         self._scan_list['subscan']= [f for f in files_fits if 'summary' not in f]
         # Print
-        self._subscan_list_print()
+        #self._subscan_list_print()
                 
     def _pipeline_geometry_grouping(self, p_scan_context) -> None:
         """
@@ -348,24 +359,42 @@ class ScanPipeline:
 
         p_scan_contex: dict, pipeline data
         """
-        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.GEOMETRY_GROUPING))
+        self._logger.info("\nPIPELINE EXECUTING: {}".format(PipelineTasks.GEOMETRY_GROUPING))
         # TODO Leggere i file dalla folder e sapararli secondo geometria,
         # Dovrebbe essere possibile passare i singoli gruppi allo scan di FH 
         _subcan_len= len(self._scan_list['subscan'])
-        _geo_loop_len= self._scan_options.geometry.get_loop_len()        
+        _geo_loop_len= self._scan_options.geometry.get_loop_len()
         _mod= _subcan_len % _geo_loop_len        
         if _mod != 0:
             self._logger.error(f"Unexpected susbcan number, cannot gorup by given geometry:\n"\
                 + f"Total subscan number: {_subcan_len}\n"\
-                + f"Geomtry single group len: {_geo_loop_len}\n"\
+                + f"Geometry single group len: {_geo_loop_len}\n"\
                 + f"MOD is not zero: {_mod}")
             self._pipeline_errors= True
             return
-        # Ok subscan files number fits geo length
-        _geo_group_num= _subcan_len / _geo_loop_len
-        self._scan_list= [g.tolist() for g in np.array_split(self._scan_list, _geo_group_num)]
+        # Ok subscan files number fits geo length        
+        _geo_group_num= int(_subcan_len / _geo_loop_len)
+        self._scan_list['subscan']= [g.tolist() for g in np.array_split(self._scan_list['subscan'], _geo_group_num)]
+        # Creating self contained scan group list
+        _cnt=0
+        for el in self._scan_list['subscan']:
+            if type(el) is list:
+                self._scan_list_group.append({
+                    'group_id': _cnt,
+                    'summary': self._scan_list['summary'],
+                    'subscan': el
+                })
+                _cnt= _cnt +1            
+        if _cnt == 0:
+            # No geo, one single group
+            self._scan_list_group.append({
+                    'group_id': _cnt,
+                    'summary': self._scan_list['summary'],
+                    'subscan': self._scan_list['subscan']
+                })
         # Print geo groups
-        self._subscan_list_print()
+        #self._subscan_list_print()
+        self._subscan_group_print()
 
 
     def _pipeline_fitslike_handler(self, p_scan_context) -> None:
@@ -375,14 +404,7 @@ class ScanPipeline:
 
         p_scan_contex: dict, pipeline data
         """
-        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.FITSLIKE_HANDLER))
-        _fh= fitslike_handler.Fitslike_handler( self._scan_options.raw,\
-                    self._scan_options.geometry,\
-                    self._scan_options.type,\
-                    self._scan_options.feed,\
-                    self._scan_options.parallel)   
-        _fh.setOutputPath(self._scan_options.get_output_path())
-        p_scan_context['fh']= _fh
+        pass
     
     def _pipeline_scan_data(self, p_scan_context) -> None:
         """
@@ -390,13 +412,31 @@ class ScanPipeline:
         Raise exception if errors
 
         p_scan_contex: dict, pipeline data
-        """
-        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.SUBSCAN_PARSING))
-        try:
-            _fh= p_scan_context['fh']
-            _fh.scan_data(self._scan_options.folder)
-        except Exception as e:
-            self._logger.error(f"Exception on task execution {str(e)}")
+        """        
+        self._logger.info("\nPIPELINE EXECUTING: {}".format(PipelineTasks.SUBSCAN_PARSING))
+        # Splitting working load based on geo sub list
+        # creating a fitslike_handler scan for every geo group
+        if self._scan_list_group:
+            # Geometry applied
+            for _geo_group in self._scan_list_group:                
+                self._logger.info(f"Ready to scan group {_geo_group['group_id']}")
+                # Handler for every geo group
+                _geo_group['has_errors'] = False
+                _fh= fitslike_handler.Fitslike_handler( self._scan_options.raw,\
+                                                        self._scan_options.geometry,\
+                                                        self._scan_options.type,\
+                                                        self._scan_options.feed,\
+                                                        self._scan_options.parallel)   
+                _fh.setOutputPath(self._scan_options.get_output_path())
+                _geo_group['fh']= _fh
+                try:
+                    _fh.scan_data(_geo_group)
+                except Exception as e:                    
+                    self._logger.error(f"Exception on task execution {str(e)}")
+                    _exc_info= sys.exc_info()                    
+                    traceback.print_exc()
+                    _geo_group['has_errors']= True       
+
         
     def _pipeline_signal_grouping(self, p_scan_context) -> None:
         """
@@ -409,7 +449,7 @@ class ScanPipeline:
 
         p_scan_contex: dict, pipeline data
         """
-        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.SIGNAL_GROUPING))
+        self._logger.info("\nPIPELINE EXECUTING: {}".format(PipelineTasks.SIGNAL_GROUPING))
 
     def _pipeline_normalize(self,p_scan_context) -> None:
         """
@@ -498,17 +538,32 @@ class ScanPipeline:
 
     def _subscan_list_print(self) -> None:
         """ Print input file list """
-        # Print file list
-        self._logger.info("\nSUSBCAN FILE LIST:")
+        # Print file list        
+        self._logger.info("SUSBCAN FILE LIST:")
         self._logger.info(f"Summary: {self._scan_list['summary']}")
-        _cnt= 0
+        _cnt= 0 
         for f in self._scan_list['subscan']:
             if type(f) is list:
                 self._logger.info("Geometry group:")
                 for ff in f:
                     _cnt= _cnt +1            
-                    self._logger.debug(f" Subscan {_cnt}: {f}f")
+                    self._logger.debug(f" Subscan {_cnt}: {ff}")
             else:
                 _cnt= _cnt +1            
                 self._logger.debug(f"Subscan {_cnt}: {f}")            
         self._logger.info(f"Subscan files : {_cnt}")
+
+    def _subscan_group_print(self) -> None:
+        """ Print scan group working list """
+        # Print file list        
+        self._logger.info("SUSBCAN GROUPS:")                
+        _cnt= 0
+        for _group in self._scan_list_group:
+            self._logger.info(f"Group ID: {_group['group_id']}")
+            _head, _tail= os.path.split(_group['summary'])
+            self._logger.info(f"Summary: {_tail}")
+            for _subscan in _group['subscan']:
+                _head, _tail= os.path.split(_subscan)
+                self._logger.debug(f"Subscan {_cnt}: {_tail}")            
+                _cnt= _cnt +1            
+        self._logger.info(f"Subscan group files number : {_cnt}")
