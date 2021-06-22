@@ -9,6 +9,7 @@ import copy
 import logging
 import os
 import shutil
+import sys
 import pdb
 
 from astropy.coordinates import EarthLocation, AltAz, Angle, ICRS
@@ -21,7 +22,7 @@ from memory_profiler import profile
 from fit_to_class.fitslike_commons import keywords as kws
 from fit_to_class import fitslike_keywords
 from fit_to_class import fitslike_commons
-
+from commons import wrapkeys
 
 class Awarness_fitszilla():
     """fitszilla data parser"""
@@ -174,15 +175,15 @@ class Awarness_fitszilla():
         Keywords from summary.fits
         """
         l_keys= [ 'restfreq', 'backend_name', 'target_ra', 'target_dec' ]
-        l_restFreq= self.m_intermediate['sum_restfreq'] * unit.MHz
-        l_target_ra= self.m_intermediate['target_ra'] * unit.rad
-        l_target_dec= self.m_intermediate['target_dec'] * unit.rad
+        l_restFreq= wrapkeys.get_value(self.m_intermediate, 'sum_restfreq') * unit.MHz
+        l_target_ra= wrapkeys.get_value(self.m_intermediate,'target_ra') * unit.rad
+        l_target_dec= wrapkeys.get_value(self.m_intermediate,'target_dec') * unit.rad
         if self.m_intermediate['sum_backend_name']== 0.0:
             self.m_intermediate['sum_backend_name']= 'UNKNOWN'
             self._errorFromMissingKeyword('scheduled', 'obs_backend_name')
         l_values= [l_restFreq, self.m_intermediate['sum_backend_name'], l_target_ra, l_target_dec]
         self.m_processedRepr['summary']= dict(zip(l_keys, l_values))
-        print(self.m_processedRepr['summary'])
+        #print(self.m_processedRepr['summary'])
 
     def _process_observation(self):
         """
@@ -191,28 +192,33 @@ class Awarness_fitszilla():
 
         feed independent
         """
-        self.m_intermediate['obs_ra'] = \
-            self.m_intermediate['obs_ra'] * unit.rad
-        self.m_intermediate['obs_dec'] = \
-            self.m_intermediate['obs_dec']* unit.rad
-        self.m_intermediate['obs_ra_offset'] = \
-            self.m_intermediate['obs_ra_offset'] *unit.rad
-        self.m_intermediate['obs_dec_offset'] = \
-            self.m_intermediate['obs_dec_offset']* unit.rad
-        self.m_intermediate['obs_az_offset'] = \
-            self.m_intermediate['obs_az_offset']* unit.rad
-        self.m_intermediate['obs_el_offset'] = \
-            self.m_intermediate['obs_el_offset']*unit.rad
-        self.m_intermediate['obs_gal_lat_offset'] = \
-            self.m_intermediate['obs_gal_lat_offset']*unit.rad
-        self.m_intermediate['obs_gal_lon_offset'] = \
-            self.m_intermediate['obs_gal_lon_offset']*unit.rad
-        self.m_intermediate['obs_user_lat_offset'] = \
-            self.m_intermediate['obs_user_lat_offset']*unit.rad
-        self.m_intermediate['obs_user_lon_offset'] = \
-            self.m_intermediate['obs_user_lon_offset']*unit.rad   
-        self.m_intermediate['file_name']= self.m_fileName
-        self.m_intermediate['obs_vlsr'] *=  unit.Unit("km/s")
+        try:
+            self.m_intermediate['obs_ra'] = \
+                wrapkeys.get_value(self.m_intermediate,'obs_ra') * unit.rad
+            self.m_intermediate['obs_dec'] = \
+                wrapkeys.get_value(self.m_intermediate,'obs_dec')* unit.rad
+            self.m_intermediate['obs_ra_offset'] = \
+                wrapkeys.get_value(self.m_intermediate,'obs_ra_offset') *unit.rad
+            self.m_intermediate['obs_dec_offset'] = \
+                wrapkeys.get_value(self.m_intermediate,'obs_dec_offset')* unit.rad
+            self.m_intermediate['obs_az_offset'] = \
+                wrapkeys.get_value(self.m_intermediate,'obs_az_offset')* unit.rad
+            self.m_intermediate['obs_el_offset'] = \
+                wrapkeys.get_value(self.m_intermediate,'obs_el_offset')*unit.rad
+            self.m_intermediate['obs_gal_lat_offset'] = \
+                wrapkeys.get_value(self.m_intermediate,'obs_gal_lat_offset')*unit.rad
+            self.m_intermediate['obs_gal_lon_offset'] = \
+                wrapkeys.get_value(self.m_intermediate,'obs_gal_lon_offset')*unit.rad                
+            self.m_intermediate['obs_user_lat_offset'] = \
+                wrapkeys.get_value(self.m_intermediate,'obs_user_lat_offset')*unit.rad
+            self.m_intermediate['obs_user_lon_offset'] = \
+                wrapkeys.get_value(self.m_intermediate,'obs_user_lon_offset')*unit.rad   
+            self.m_intermediate['file_name']= self.m_fileName
+            self.m_intermediate['obs_vlsr'] *=  unit.Unit("km/s")        
+        except Exception as e:
+            self.m_logger.error(f"{str(e)}")
+            _func_name= sys._getframe().f_code.co_name
+            raise Exception(f"Mandatory observation keywords cannot have issues!\n Where: {type(self).__name__}::{_func_name}")
         "todo : trasportare le coordinate  per ogni feed?"
         l_scheduled= {}
         try:

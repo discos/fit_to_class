@@ -433,8 +433,8 @@ class ScanPipeline:
                     _fh.scan_data(_geo_group)
                 except Exception as e:                    
                     self._logger.error(f"Exception on task execution {str(e)}")
-                    _exc_info= sys.exc_info()                    
-                    traceback.print_exc()
+                    #_exc_info= sys.exc_info()                    
+                    #traceback.print_exc()
                     _geo_group['has_errors']= True       
 
         
