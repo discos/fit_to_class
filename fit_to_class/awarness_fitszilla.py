@@ -5,7 +5,6 @@
 """
 
 import numpy as np
-import copy
 import logging
 import os
 import shutil
@@ -23,6 +22,8 @@ from fit_to_class.fitslike_commons import keywords as kws
 from fit_to_class import fitslike_keywords
 from fit_to_class import fitslike_commons
 from commons import wrapkeys
+from fit_to_class import awarness_fitszilla_coord as coord
+
 
 class Awarness_fitszilla():
     """fitszilla data parser"""
@@ -440,158 +441,6 @@ class Awarness_fitszilla():
         None.
 
         """
-        def _coordinate_feeds_rest_angle(p_xoffsets, p_yoffsets):
-            """
-            Rest angle generation for every feed:
-                - derotaion angle in resting condition
-
-            Parameters
-            ----------
-            p_xoffsets : list
-                feeds X offset list
-            p_yoffsets : list
-                feeds y offset list
-
-            Returns
-            -------
-            todo
-
-            """
-            if (len(p_xoffsets)) <= 2:
-                return np.array([0]*len(p_xoffsets))
-            l_npXOffsets= np.asarray(p_xoffsets)
-            l_npYOffsets= np.asarray(p_yoffsets)
-            l_num_lat_feeds= len(p_xoffsets) -1
-            l_angle_range= np.arange(1, 0, -1/l_num_lat_feeds)
-            l_rest_angle_def = l_angle_range * 2 * np.pi * unit.rad
-            l_w0= np.where((l_npXOffsets[1:] > 0) & (l_npYOffsets[1:] == 0.))[0][0]
-            return np.concatenate(([0], np.roll(l_rest_angle_def.to(unit.rad).value, l_w0))) * unit.rad
-
-        def _coordinates_observing_angle(p_rest_angle, p_derot_angle):
-            """
-            Observign angle calculation for one feed
-
-            Parameters
-            ----------
-            p_rest_angle : double, rad
-                feed rest angle.
-            p_derot_angle : array, rad
-                actual derotation angle
-
-            Returns
-            -------
-            Feed observing angle
-            rad
-
-            """
-            if not hasattr(p_rest_angle, 'unit'):
-                p_rest_angle *= unit.rad
-            if not hasattr(p_derot_angle, 'unit'):
-                p_derot_angle *= unit.rad
-            #pdb.set_trace()
-            return p_rest_angle + (2 * np.pi * unit.rad - p_derot_angle)
-
-        def _coordinates_offset_needs_correction(p_coord):
-            """
-            Check this feed offset amount.
-            Nearly no offset feeds don't need correction
-
-            Parameters
-            ----------
-            p_coord : Dictionary
-                Coordinate infos for on feed
-
-            Returns
-            -------
-            True needs correction
-
-            """
-            if np.abs(p_coord['fe_x_offset'] ) < \
-                np.radians(0.001 / 60.) * unit.rad and \
-                np.abs(p_coord['fe_y_offset'] ) < \
-                    np.radians(0.001 / 60.)* unit.rad :
-                    return False
-            return True
-
-        def _coordinates_offset_corrections(p_obs_angle, p_xoffset, p_yoffset):
-            """
-            Feed offset correction at observation angle
-
-            Parameters
-            ----------
-            p_obs_angle : float rad
-                Observation angle
-            p_xoffset : float rad
-                feed x offset
-            p_xoffset : float rad
-                feed y offset
-
-            Returns
-            -------
-            Corrected feed offset float rad.
-
-            """
-            l_sep = np.sqrt(p_xoffset**2. + p_yoffset**2.)
-            l_corr_xoff = l_sep * np.cos(p_obs_angle)
-            l_corr_yoff = l_sep * np.sin(p_obs_angle)
-            return l_corr_xoff, l_corr_yoff
-
-        def _coordinates_azel_to_radec(p_obstimes,
-                                       p_el, p_az,
-                                       p_xoffs, p_yoffs,
-                                       p_location):
-            """
-            Conversion from alt-az to ra-dec.
-            Offset must be correccted based on observation time.
-            Returns:
-            --------
-            Actual ra dec lists            
-            
-            """            
-            l_el = copy.deepcopy(p_el)
-            l_az = copy.deepcopy(p_az)            
-            
-            # Basic version, header fitszilla version < V1.21                                     
-            # TODO è corretto fare la conversione standard con gal? non si cagano gli offset..
-            if self.m_scheduled['user_offset_frame']== 'GAL':
-                self.m_logger.error("Cannot convert coordinates! skupping..data will result as incomplete?")
-                # feed offset (corected)relates to az, el they need recalc to add az
-                l_el += p_yoffs
-                l_az += p_xoffs / np.cos(l_el)
-                # TODO Conversion to adapt orign to az, el allowing data to fit ICRS !?
-                l_coordsAltAz = AltAz(az=Angle(l_az),
-                                      alt=Angle(l_el),
-                                      location= p_location,
-                                      obstime= p_obstimes)
-                # According to line_profiler, coords.icrs is *by far* the longest
-                # operation in this function, taking between 80 and 90% of the
-                # execution time. Need to study a way to avoid this.
-                l_coords_deg = l_coordsAltAz.transform_to(ICRS)
-                l_ra = np.radians(l_coords_deg.ra)
-                l_dec = np.radians(l_coords_deg.dec)
-                return l_ra, l_dec        
-                        
-            # Pre Apply offset for HOR
-            if self.m_scheduled['user_offset_frame']== 'HOR':
-                self.m_logger.info("Offset frame HOR ")
-                l_el = l_el + p_yoffs - self.m_scheduled['user_lat_offset']
-                l_az = l_az +( p_xoffs - self.m_scheduled['user_lon_offset'] ) / np.cos(l_el)                
-            
-            # Frame change
-            l_coordsAltAz = AltAz(az=Angle(l_az), alt=Angle(l_el), location= p_location, obstime= p_obstimes)
-            l_coords_deg = l_coordsAltAz.transform_to(ICRS)
-            
-            # Post apply offset for
-            if self.m_scheduled['user_offset_frame']== 'EQ':
-                self.m_logger.info("Offset frame EQ")
-                l_dec = np.radians(l_coords_deg.dec) - self.m_scheduled['user_lat_offset']
-                l_ra = np.radians(l_coords_deg.ra) - self.m_scheduled['user_lon_offset'] / np.cos(l_dec)
-            else:
-                l_ra = np.radians(l_coords_deg.ra)
-                l_dec = np.radians(l_coords_deg.dec)
-                      
-            return l_ra, l_dec
-
 
         # Process coordinates for every table entries
         l_coordinatesDict= {
@@ -615,7 +464,7 @@ class Awarness_fitszilla():
         # rest angle for every feed
         l_feedXOffsets = self.m_intermediate['fe_x_offset']* unit.rad
         l_feedYOffsets = self.m_intermediate['fe_y_offset']* unit.rad
-        l_feedsRestAngles = _coordinate_feeds_rest_angle(l_feedXOffsets, l_feedYOffsets)
+        l_feedsRestAngles = coord._feeds_rest_angle(l_feedXOffsets, l_feedYOffsets)
         # for every feed..
         # decor feed - coordinates dict with feed rest angle
         # update observing angle on feed basis
@@ -631,12 +480,12 @@ class Awarness_fitszilla():
                 l_feedsRestAngles[l_feed]
             l_feedCoord['fe_x_offset']= l_feedXOffsets[l_feed]
             l_feedCoord['fe_y_offset']= l_feedYOffsets[l_feed]
-            l_feedObsAngle = _coordinates_observing_angle(
+            l_feedObsAngle = coord._observing_angle(
                 l_feedsRestAngles[l_feed],
                 l_feedCoord['data_derot_angle'])
             # with feed 0 skip correction
-            if _coordinates_offset_needs_correction(l_feedCoord):
-                l_correctedXoff, l_correctedYoff = _coordinates_offset_corrections(
+            if coord._offset_needs_correction(l_feedCoord):
+                l_correctedXoff, l_correctedYoff = coord._offset_corrections(
                     l_feedObsAngle,
                     l_feedCoord['fe_x_offset'],
                     l_feedCoord['fe_y_offset']
@@ -653,21 +502,22 @@ class Awarness_fitszilla():
                 )
             # Final coordinates ra, dec after calculations
             l_feedCoord['data_ra'], l_feedCoord['data_dec'] = \
-                _coordinates_azel_to_radec(l_obstime,
-                                           l_feedCoord['data_el'],
-                                           l_feedCoord['data_az'],
-                                           l_correctedXoff,
-                                           l_correctedYoff,
-                                           l_location)
+                coord._azel_to_radec(self.m_scheduled,
+                                    l_obstime,
+                                    l_feedCoord['data_el'],
+                                    l_feedCoord['data_az'],
+                                    l_correctedXoff,
+                                    l_correctedYoff,
+                                    l_location)
             # coordinates dict storage
             for feed in self.m_processedRepr.keys():
                 if self.m_feed:
                     if not self.m_feed in str(feed):
                         continue
                 for chx in self.m_processedRepr[feed]:
-                    l_chx = self.m_processedRepr[feed][chx]
-                    if l_chx['frontend']['feed'] == l_feed:
-                        l_chx['coordinates']= l_feedCoord.copy()
+                    _section = self.m_processedRepr[feed][chx]
+                    if _section['frontend']['feed'] == l_feed:
+                        _section['coordinates']= l_feedCoord.copy()
 
     def _process_extras(self):
         """
@@ -679,13 +529,13 @@ class Awarness_fitszilla():
                 if not self.m_feed in str(feed):
                     continue
             for chx in self.m_processedRepr[feed]:
-                l_chx = self.m_processedRepr[feed][chx]
-                l_chx['extras']= {}
+                _section = self.m_processedRepr[feed][chx]
+                _section['extras']= {}
                 " weather "
                 l_weather= self.m_intermediate['ex_weather']
-                l_chx['extras']['weather']= []
+                _section['extras']['weather']= []
                 for el in l_weather:
-                    l_chx['extras']['weather'].append(\
+                    _section['extras']['weather'].append(\
                         self.m_commons.calculate_weather(el[1] + 273.15, el[0]))
 
 
@@ -779,9 +629,9 @@ class Awarness_fitszilla():
                 if not self.m_feed in str(feed):
                     continue
             for chx in self.m_processedRepr[feed]:
-                l_chx= self.m_processedRepr[feed][chx]
-                l_coo= l_chx['coordinates']
-                l_spec= l_chx['spectrum']
+                _section= self.m_processedRepr[feed][chx]
+                l_coo= _section['coordinates']
+                l_spec= _section['spectrum']
                 # Check, some scan split data feed one per file
                 # Expecting numpy ndarray for spectrum data
                 if 'data' not in l_spec.keys():
@@ -790,10 +640,10 @@ class Awarness_fitszilla():
                 if not shape : continue
                 if shape[0]== 0 : continue
                 # Stokes ?
-                if l_chx['backend']['data_type']== 'stokes':
+                if _section['backend']['data_type']== 'stokes':
                     " split stokes, repeating data "
                     data= l_spec['data']
-                    l_bins= l_chx['backend']['bins']
+                    l_bins= _section['backend']['bins']
                     self.m_logger.info("section {} : data shape {} - bins {}".format(chx, shape, l_bins))
                     try:
                         L= (data[:,:l_bins], "LL")
@@ -817,7 +667,7 @@ class Awarness_fitszilla():
                                     "data_dec", "weather", "data", "flag_cal"]
                             l_data= [l_coo["data_time"], polLabel, l_coo["data_az"],
                                      l_coo["data_el"],l_coo["data_derot_angle"],l_coo["data_ra"],
-                                     l_coo["data_dec"], l_chx['extras']['weather'], poldata,
+                                     l_coo["data_dec"], _section['extras']['weather'], poldata,
                                      l_spec["flag_cal"]]
                             for n, v in zip(l_keys, l_data):
                                 # If i have scalar without quantity
@@ -836,7 +686,7 @@ class Awarness_fitszilla():
                         l_tGroupPol.append(l_pol_table)
                     # Group and aggregation
                     if not l_tGroupPol:
-                        l_chx['groups']= QTable()
+                        _section['groups']= QTable()
                         continue                                      
                     # Regroup data from varius pol into one table
                     l_oneTable= vstack(l_tGroupPol)
@@ -845,14 +695,14 @@ class Awarness_fitszilla():
                     " manage pwr spectrum "
                     l_oneTable = QTable()
                     l_shape= l_coo["time_mjd"].shape
-                    l_pol= l_chx['frontend']['polarizations']
+                    l_pol= _section['frontend']['polarizations']
                     " uniform polarization strings "
                     if l_pol== 'LCP': l_pol= 'LL'
                     if l_pol== 'RCP': l_pol= 'RR'
                     l_polShaped= np.full(l_shape, l_pol)
                     l_keys= [l_coo["data_time"],l_polShaped,l_coo["data_az"],
                              l_coo["data_el"],l_coo["data_derot_angle"], l_coo["data_ra"],
-                             l_coo["data_dec"], l_chx['extras']['weather'], l_spec['data'],
+                             l_coo["data_dec"], _section['extras']['weather'], l_spec['data'],
                              l_spec["flag_cal"]]
                     l_names= ["data_time_mjd", "pol", "data_az",
                             "data_el", "data_derot_angle", "data_ra",
@@ -874,15 +724,15 @@ class Awarness_fitszilla():
                 del l_coo["data_derot_angle"]
                 del l_coo["data_ra"]
                 del l_coo["data_dec"]
-                del l_chx['extras']['weather']
+                del _section['extras']['weather']
                 del l_spec["data"]
                 del l_spec["flag_cal"]                              
 
                 # One table to rule'em all   
                 
                 # Adding ON OFF column to the whole table
-                l_isOn= _is_on(l_chx, feed)
-                if l_isOn:
+                _isOn= _is_on(_section, feed)
+                if _isOn:
                     on_col_data= [1]*len(l_oneTable)
                 else:
                     on_col_data= [0]*len(l_oneTable)
@@ -893,24 +743,24 @@ class Awarness_fitszilla():
             
                 for group in  l_oneTable.group_by(['pol']).groups:
                     # Cal on cal off
-                    l_isCal= _is_cal(l_chx, group)
+                    _isCal= _is_cal(_section, group)
                     #Cal on
-                    if l_isCal and np.any(group['is_on']):
+                    if _isCal and np.any(group['is_on']):
                         cal_on_col= Column([1]*len(group),'cal_on')
                         group.add_column(cal_on_col)
                         self.m_logger.info("{}--{}_{}_{} is cal_on".format(self.m_file_name, feed, chx, group['pol'][0]))
                     #Cal off
-                    if l_isCal and not np.any(group['is_on']):
+                    if _isCal and not np.any(group['is_on']):
                         cal_off_col= Column([1]*len(group),'cal_off')
                         group.add_column(cal_off_col)
                         self.m_logger.info("{}--{}_{}_{} is cal_off".format(self.m_file_name, feed, chx, group['pol'][0]))
                     # Signal
-                    if not l_isCal and np.any(group['is_on']):
+                    if not _isCal and np.any(group['is_on']):
                         signal_col= Column([1]*len(group),'signal')
                         group.add_column(signal_col)           
                         self.m_logger.info("{}--{}_{}_{} is signal".format(self.m_file_name, feed, chx, group['pol'][0]))
                     # Off
-                    if not l_isCal and not np.any(group['is_on']):
+                    if not _isCal and not np.any(group['is_on']):
                         off_col= Column([1]*len(group),'reference')
                         group.add_column(off_col)
                         self.m_logger.info("{}--{}_{}_{} is reference".format(self.m_file_name, feed, chx, group['pol'][0]))
@@ -921,19 +771,19 @@ class Awarness_fitszilla():
                     l_temporary_tables.append(group)
                 # Stack and group with on/off and cal on/cal off
                 l_stacked= vstack(l_temporary_tables)
-                l_chx['groups_by_pol']= l_stacked.group_by(['pol']).groups
+                _section['groups_by_pol']= l_stacked.group_by(['pol']).groups
                 # Write groups to disk
                 l_pols={}
-                for group in l_chx['groups_by_pol']:
+                for group in _section['groups_by_pol']:
                     # Write table to disk
                     if 'pol' in group.colnames:
                         l_pols[group['pol'][0]]= self._writeTableToFile(group, feed, chx, group['pol'][0])
                     else:
                         self.m_logger.error("Missing polarization label! skip table")
                 # Keep trace of on disk tables
-                l_chx['pol_tables_dict']= l_pols                
+                _section['pol_tables_dict']= l_pols                
                 # Remove unesfull data on fits representation
-                del l_chx['groups_by_pol']                    
+                del _section['groups_by_pol']                    
                     
 
 

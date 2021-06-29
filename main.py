@@ -6,6 +6,8 @@ converter entry point
 
 import argparse
 import logging
+import warnings
+from astropy.utils.exceptions import AstropyWarning
 from fit_to_class import fitslike_commons
 import scanoptions
 import scanpipeline
@@ -13,7 +15,9 @@ import scanpipeline
 def run():
     """
     Running program
-    """
+    """    
+    # Soppressione astropy warning riguardo ai frame usati nella trasformazione di coordinate
+    warnings.simplefilter('ignore', AstropyWarning)
     # Logger
     l_commons = fitslike_commons.Fitslike_commons()    
     l_logger = logging.getLogger(l_commons.logger_name())

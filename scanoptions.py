@@ -61,9 +61,8 @@ class ScanOptions:
             raise ValueError("Folder argument shoud be of string type")            
         if not os.path.isdir(p_folder):            
             raise ValueError("Folder argument shoud be a valid path")            
-        self._folder= p_folder.rstrip('/')      
-        tail, head = os.path.split(self._folder)         
-        self._output_path= tail+ head+ ScanOptions.output_fname_suffix +'/'          
+        self._folder= p_folder.rstrip('/')              
+        self._output_path= os.path.join(self._folder,ScanOptions.output_fname_suffix +'/')          
 
 
     # SCAN PIPELINE CONF PATH

@@ -426,8 +426,8 @@ class ScanPipeline:
                                                         self._scan_options.geometry,\
                                                         self._scan_options.type,\
                                                         self._scan_options.feed,\
-                                                        self._scan_options.parallel)   
-                _fh.setOutputPath(self._scan_options.get_output_path())
+                                                        self._scan_options.parallel)                                                                        
+                _fh.setOutputPath(self._scan_options.get_output_path().rstrip('/')+'_'+str(_geo_group['group_id']))
                 _geo_group['fh']= _fh
                 try:
                     _fh.scan_data(_geo_group)
@@ -450,6 +450,23 @@ class ScanPipeline:
         p_scan_contex: dict, pipeline data
         """
         self._logger.info("\nPIPELINE EXECUTING: {}".format(PipelineTasks.SIGNAL_GROUPING))
+        # Traversing scan groups
+        if self._scan_list_group:            
+            for _geo_group in self._scan_list_group:             
+                self._logger.info(f"On Off Call for group {_geo_group['group_id']}")                   
+                # FH, fitslike_handler contains scan data for the given geo group
+                if 'fh' in _geo_group:
+                    try:
+                        _geo_group['fh'].group_on_off_cal(_geo_group['group_id'])
+                    except Exception as e:
+                        self._logger.error(f"Exception on data grouping {str(e)}")
+                        self._logger.error("\nEXCEPTION\n-------------------------------------")
+                        _exc_info= sys.exc_info()                    
+                        traceback.print_exc()
+                        self._logger.error("\n-------------------------------------")
+                else:
+                    self._logger.error(f"Missing fitslike handler for group {_geo_group['group_id']}")                    
+                    
 
     def _pipeline_normalize(self,p_scan_context) -> None:
         """
@@ -459,6 +476,7 @@ class ScanPipeline:
         p_scan_contex: dict, pipeline data
         """
         self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.DATA_CALIBRATION))
+        
     
     def _pipeline_classfits(self,p_scan_context) -> None:
         """

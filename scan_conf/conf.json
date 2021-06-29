@@ -16,7 +16,7 @@
     },
 
     "signal_grouping":{
-        "enabled": false
+        "enabled": true
     },
 
     "data_calibration":{
