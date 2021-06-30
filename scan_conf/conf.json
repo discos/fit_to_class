@@ -20,10 +20,10 @@
     },
 
     "data_calibration":{
-        "enabled": false
+        "enabled": true
     },
 
     "classfit_conversion":{
-        "enabled": false
+        "enabled": true
     }
 }

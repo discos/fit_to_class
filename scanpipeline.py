@@ -119,13 +119,6 @@ class ScanPipeline:
                         "enabled" : False
                     })
         )
-        # Fitslike handler 
-        _list.append(( PipelineTasks.FITSLIKE_HANDLER,
-                    {     
-                        "task": self._pipeline_fitslike_handler,
-                        "enabled" : False
-                    })
-        )
         # File scan
         _list.append(( PipelineTasks.SUBSCAN_PARSING,
                     {                    
@@ -143,7 +136,7 @@ class ScanPipeline:
         # Normalize values
         _list.append((PipelineTasks.DATA_CALIBRATION,
                     {            
-                        "task": self._pipeline_fitslike_handler,
+                        "task": self._pipeline_normalize,
                         "enabled" : False
                     })
         )
@@ -209,14 +202,7 @@ class ScanPipeline:
                 _enabled= self._conf_task_is_enabled(PipelineTasks.GEOMETRY_GROUPING)
                 if _enabled: 
                     self._pipeline_task_set_enabled(_task_geo)
-                self._scan_pipeline.append(_task_geo)
-        # Fitsklike handler, mandatory
-        _task_ft= self._pipeline_find_task(PipelineTasks.FITSLIKE_HANDLER)        
-        if _task_ft:            
-            _enabled= self._conf_task_is_enabled(PipelineTasks.FITSLIKE_HANDLER)
-            if _enabled: 
-                self._pipeline_task_set_enabled(_task_ft)            
-            self._scan_pipeline.append(_task_ft)                        
+                self._scan_pipeline.append(_task_geo)                        
         # Scan files, mandatory
         _task_scan= self._pipeline_find_task(PipelineTasks.SUBSCAN_PARSING)        
         if _task_scan:
@@ -395,16 +381,7 @@ class ScanPipeline:
         # Print geo groups
         #self._subscan_list_print()
         self._subscan_group_print()
-
-
-    def _pipeline_fitslike_handler(self, p_scan_context) -> None:
-        """
-        Creates fitlike handler 
-        Raise exception if errors
-
-        p_scan_contex: dict, pipeline data
-        """
-        pass
+   
     
     def _pipeline_scan_data(self, p_scan_context) -> None:
         """
@@ -457,9 +434,9 @@ class ScanPipeline:
                 # FH, fitslike_handler contains scan data for the given geo group
                 if 'fh' in _geo_group:
                     try:
-                        _geo_group['fh'].group_on_off_cal(_geo_group['group_id'])
+                        _geo_group['fh'].group_on_off_cal()
                     except Exception as e:
-                        self._logger.error(f"Exception on data grouping {str(e)}")
+                        self._logger.error(f"Exception on data during On Off Cal step {str(e)}")
                         self._logger.error("\nEXCEPTION\n-------------------------------------")
                         _exc_info= sys.exc_info()                    
                         traceback.print_exc()
@@ -476,6 +453,22 @@ class ScanPipeline:
         p_scan_contex: dict, pipeline data
         """
         self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.DATA_CALIBRATION))
+        # Traversing scan groups
+        if self._scan_list_group:            
+            for _geo_group in self._scan_list_group:             
+                self._logger.info(f"On Off Call for group {_geo_group['group_id']}")                   
+                # FH, fitslike_handler contains scan data for the given geo group
+                if 'fh' in _geo_group:
+                    try:
+                        _geo_group['fh'].normalize()
+                    except Exception as e:
+                        self._logger.error(f"Exception on data calibration {str(e)}")
+                        self._logger.error("\nEXCEPTION\n-------------------------------------")
+                        _exc_info= sys.exc_info()                    
+                        traceback.print_exc()
+                        self._logger.error("\n-------------------------------------")
+                else:
+                    self._logger.error(f"Missing fitslike handler for group {_geo_group['group_id']}")    
         
     
     def _pipeline_classfits(self,p_scan_context) -> None:
@@ -486,6 +479,22 @@ class ScanPipeline:
         p_scan_contex: dict, pipeline data
         """
         self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.CLASSFITS_CONVERSION))
+        # Traversing scan groups
+        if self._scan_list_group:            
+            for _geo_group in self._scan_list_group:             
+                self._logger.info(f"On Off Call for group {_geo_group['group_id']}")                   
+                # FH, fitslike_handler contains scan data for the given geo group
+                if 'fh' in _geo_group:
+                    try:
+                        _geo_group['fh'].ClassFitsAdaptations()
+                    except Exception as e:
+                        self._logger.error(f"Exception on data conversion to classfit {str(e)}")
+                        self._logger.error("\nEXCEPTION\n-------------------------------------")
+                        _exc_info= sys.exc_info()                    
+                        traceback.print_exc()
+                        self._logger.error("\n-------------------------------------")
+                else:
+                    self._logger.error(f"Missing fitslike handler for group {_geo_group['group_id']}")
 
     # UTY 
                         

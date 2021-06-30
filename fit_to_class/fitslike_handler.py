@@ -3,6 +3,10 @@
 import os
 import re
 import logging
+import sys
+import shutil
+import pdb
+import traceback
 from astropy.io import fits
 import numpy as np
 import astropy.units as unit
@@ -10,10 +14,7 @@ from astropy.table import QTable, vstack, Column
 from astropy.time import Time
 import astropy.constants as const
 from multiprocessing import Pool
-import sys
-import os
-import shutil
-import pdb
+
 
 from fit_to_class import fitslike
 from fit_to_class  import awarness_fitszilla
@@ -193,7 +194,7 @@ class Fitslike_handler():
             # Adding new data to subscan data list            
             self.m_subscans= self.m_subscans+  [x.get() for x in _results]             
         # Summary parsing on its own                
-        self._summary= _async_subscan(self.m_logger, 'fitszilla', self.m_feed, _summary, self.m_outputPath)        
+        self.m_summary= _async_subscan(self.m_logger, 'fitszilla', self.m_feed, _summary, self.m_outputPath)        
         # 
         self.m_logger.info("Subscan numbers " + str(len(self.m_subscans)))
 
@@ -243,7 +244,7 @@ class Fitslike_handler():
         """
         
 
-    def group_on_off_cal(self, p_group_id= '', p_group_list= None):
+    def group_on_off_cal(self, p_group_list= None):
         """
         Creates a new dict for :
             - On
@@ -640,9 +641,10 @@ class Fitslike_handler():
             _feed_path= os.path.join(self.m_class_path, 'class_feed_{}'.format(_feed))
             if not os.path.exists(_feed_path):
                 os.mkdir(_feed_path)
-            # Sections traverse
-            for _ch in self.m_group_on_off_cal[_feed]:
-                _section= self.m_group_on_off_cal[_feed][_section]
+            # Sections traverse            
+            for _section in self.m_group_on_off_cal[_feed]:
+                _section_data= self.m_group_on_off_cal[_feed][_section]
+                #pdb.set_trace()
                 _section_pols= self.m_group_on_off_cal[_feed][_section]['pols']
                 for pol in ['LL', 'RR', 'LR', 'RL']:
                     if pol not in _section_pols.keys(): continue                    
@@ -654,43 +656,43 @@ class Fitslike_handler():
                         # Data retreiving one level up from 'on' data
                         if 'calibrated' in _section_pols[pol].keys():
                             calibrated_data_path= _section_pols[pol]['calibrated']                                
-                            self.m_logger.info("Loading normalized {}-{}-{} path {}".format(_feed, _ch, pol,calibrated_data_path))
+                            self.m_logger.info("Loading normalized {}-{}-{} path {}".format(_feed, _section, pol,calibrated_data_path))
                             if calibrated_data_path: 
                                 _polarization_table= QTable.read(calibrated_data_path, memmap= True)
                                 calibration_type= 'calibrated'
                             else:
-                                self.m_logger.info("calibrated for {}-{}-{} is empty".format(_feed, _ch, pol))                                    
+                                self.m_logger.info("calibrated for {}-{}-{} is empty".format(_feed, _section, pol))                                    
                                 
                         if  not _polarization_table and 'on_off' in _section_pols[pol].keys():
                             on_off_data_table_path= _section_pols[pol]['on_off']
-                            self.m_logger.info("Loading on_off {}-{}-{} path {}".format(_feed, _ch, pol,on_off_data_table_path))
+                            self.m_logger.info("Loading on_off {}-{}-{} path {}".format(_feed, _section, pol,on_off_data_table_path))
                             if on_off_data_table_path:
                                 _polarization_table= QTable.read(on_off_data_table_path, memmap= True)
                                 calibration_type= 'on_off'                                
                             else:
-                                self.m_logger.info("on_off data for {}-{}-{} is empty".format(_feed, _ch, pol))    
+                                self.m_logger.info("on_off data for {}-{}-{} is empty".format(_feed, _section, pol))    
                                 
                         if not _polarization_table and 'signal' in _section_pols[pol].keys():
                             signa_data_path= _section_pols[pol]['signal']
-                            self.m_logger.info("Loading signal {}-{}-{} path {}".format(_feed, _ch, pol,signa_data_path))
+                            self.m_logger.info("Loading signal {}-{}-{} path {}".format(_feed, _section, pol,signa_data_path))
                             if signa_data_path:
                                 _polarization_table= QTable.read(signa_data_path, memmap= True)
                                 calibration_type= 'signal'
                             else:
-                                self.m_logger.info("signal data for {}-{}-{} is empty".format(_feed, _ch, pol))                                    
+                                self.m_logger.info("signal data for {}-{}-{} is empty".format(_feed, _section, pol))                                    
                                 
                         if  not _polarization_table and 'reference' in _section_pols[pol].keys():
                             reference_data_path= _section_pols[pol]['reference']
-                            self.m_logger.info("Loading reference {}-{}-{} path {}".format(_feed, _ch, pol,reference_data_path))
+                            self.m_logger.info("Loading reference {}-{}-{} path {}".format(_feed, _section, pol,reference_data_path))
                             if reference_data_path:
                                 _polarization_table= QTable.read(reference_data_path, memmap= True)
                                 calibration_type= 'reference'
                             else:
-                                self.m_logger.info("reference data for {}-{}-{} is empty".format(_feed, _ch, pol))                                                                    
+                                self.m_logger.info("reference data for {}-{}-{} is empty".format(_feed, _section, pol))                                                                    
                                 
                         # No available input data options..
                         if not _polarization_table:
-                            self.m_logger.warning("{}_{}_{} No data suitable for class conversion".format(_feed, _ch, pol))
+                            self.m_logger.warning("{}_{}_{} No data suitable for class conversion".format(_feed, _section, pol))
                             continue
                         
                     except IOError as e:
@@ -703,9 +705,9 @@ class Fitslike_handler():
                     # Generic observation data copy to dedicated dict, more copies
                     # below during calculations
                     self.m_obs_genera_data={}
-                    self.m_obs_genera_data['ra']= _section['scheduled']['ra'].to(unit.deg).value
-                    self.m_obs_genera_data['dec']= _section['scheduled']['dec'].to(unit.deg).value
-                    self.m_obs_genera_data['source']= _section['scheduled']['source']
+                    self.m_obs_genera_data['ra']= _section_data['scheduled']['ra'].to(unit.deg).value
+                    self.m_obs_genera_data['dec']= _section_data['scheduled']['dec'].to(unit.deg).value
+                    self.m_obs_genera_data['source']= _section_data['scheduled']['source']
                     self.m_obs_genera_data['date-red']= Time.now().to_datetime().strftime('%d/%m/%y')
                     # classfits new dict filling process
                     _class_data= {}
@@ -715,7 +717,7 @@ class Fitslike_handler():
                         _class_data['SPECTRUM']= _polarization_table['data']
                         # data shape they must be equals ( on_off cal on )
                         data_shape= _class_data['SPECTRUM'].shape
-                        _class_data['CRPIX1']=  _section['backend']['bins'] // 2 + 1
+                        _class_data['CRPIX1']=  _section_data['backend']['bins'] // 2 + 1
                         # Lavoro con i dati integrati
                         # ut
                         _tMjd= _polarization_table['data_time_mjd']
@@ -726,17 +728,17 @@ class Fitslike_handler():
                         # lsts
                         _lsts= _timeMjd.sidereal_time('apparent', \
                                   fitslike_commons.Fitslike_commons.\
-                                      get_site_location(_section['scheduled']['antenna']).lon)
+                                      get_site_location(_section_data['scheduled']['antenna']).lon)
                         _lsts= _lsts.value * unit.hr
                         # infos
-                        _class_data['OBJECT']= _section['scheduled']['source']
+                        _class_data['OBJECT']= _section_data['scheduled']['source']
                         _class_data['LINE']= "F{}-{:3.3f}-MHz"\
-                            .format(_section['frontend']['feed'], _section['backend']['bandwidth'])
+                            .format(_section_data['frontend']['feed'], _section_data['backend']['bandwidth'])
                         self.m_obs_genera_data['line']= _class_data['LINE']
                         try:
                             #pdb.set_trace()
                             _class_data['TELESCOP']=\
-                                self.m_commons.class_telescope_name(_section,self.m_summary['summary']['backend_name'], pol, _ch)
+                                self.m_commons.class_telescope_name(_section_data,self.m_summary['summary']['backend_name'], pol, _section)
                         except ValueError as e:
                             self.m_logger.error("Missing summary !? TELESCOP set to empty value \n Excpetion: "+ str(e))
                             _class_data['TELESCOP']= ""
@@ -744,23 +746,23 @@ class Fitslike_handler():
                         _class_data['MH2O']= _mH2O
                         # temp
                         _class_data['TSYS']= 1.0
-                        _class_data['CALTEMP']= _section['frontend']['cal_mark_temp'].value
+                        _class_data['CALTEMP']= _section_data['frontend']['cal_mark_temp'].value
                         # time
                         _class_data['LST'] = _lsts.to('s').value
                         # CDELT
-                        _class_data['CDELT1']= (_section['frontend']['bandwidth'] / _section['backend']['bins']).to('Hz')
+                        _class_data['CDELT1']= (_section_data['frontend']['bandwidth'] / _section_data['backend']['bins']).to('Hz')
                         # freq and velocity
                         #pdb.set_trace()
                         _class_data['RESTFREQ']= self.m_summary['summary']['restfreq'].to(unit.Hz).value                        
                         # Caso semplificato (<1) se la rest freq è a 0 uso la frequenza del canale bins/2+1
                         if _class_data['RESTFREQ'] != None:
                             if _class_data['RESTFREQ'] < 1:
-                                _class_data['RESTFREQ']= _section['frontend']['local_oscillator'].to('Hz') +\
-                                                    _class_data['CDELT1'] * (_section['backend']['bins']/2 +1)
+                                _class_data['RESTFREQ']= _section_data['frontend']['local_oscillator'].to('Hz') +\
+                                                    _class_data['CDELT1'] * (_section_data['backend']['bins']/2 +1)
                                 _class_data['RESTFREQ']= _class_data['RESTFREQ'].value
                         self.m_obs_genera_data['restfreq']= _class_data['RESTFREQ']
-                        _class_data['VELOCITY']= _section['scheduled']['vlsr'].to("m/s").value
-                        _df= (_section['backend']['bandwidth'] / _section['backend']['bins']).to('Hz')
+                        _class_data['VELOCITY']= _section_data['scheduled']['vlsr'].to("m/s").value
+                        _df= (_section_data['backend']['bandwidth'] / _section_data['backend']['bins']).to('Hz')
                         _class_data['CDELT1']= _df.value
                         self.m_obs_genera_data['cdelt1']= _class_data['CDELT1']
                         _deltav= - _df/ _class_data['RESTFREQ'] * const.c
@@ -782,8 +784,8 @@ class Fitslike_handler():
                         _class_data['AZIMUTH']= getQTableColWithUnit(_polarization_table,'data_az', unit.deg)
                         _class_data['ELEVATIO']= getQTableColWithUnit(_polarization_table,'data_el', unit.deg)
                         # data
-                        _class_data['OBSTIME'] = _section['backend']['integration_time'].to('s').value
-                        _class_data['MAXIS1'] = _section['backend']['bins']
+                        _class_data['OBSTIME'] = _section_data['backend']['integration_time'].to('s').value
+                        _class_data['MAXIS1'] = _section_data['backend']['bins']
                         self.m_obs_genera_data['maxis1']= _class_data['MAXIS1']
                         # we have to shape classfits data properly according to data shape
                         # es data shape is 12, 16384 we have to replicate data this shape
@@ -806,19 +808,19 @@ class Fitslike_handler():
                             except ValueError as e:
                                 self.m_logger.error("Exception adding column [{}] to classfit converted table {}".format(col, e))
                         # Table name generation                        
-                        _class_name= '{}_{}_{}_{}_class.fits'.format(_feed, _ch, pol, calibration_type)       
+                        _class_name= '{}_{}_{}_{}_class.fits'.format(_feed, _section, pol, calibration_type)       
                         _class_path= os.path.join(_feed_path, _class_name)
                         self.m_logger.info("class table path: {}".format(_class_path))
                         try:                            
                             self.classfitsWrite(_class_path, _class_table)
                         except ValueError as e:                            
-                            self.m_logger.error("Error writing small classfit table to disk {}".format(e))   
-                    except KeyError as e:
-                        self.m_logger.error("[KeyError] Error preparing class data: {}".format(e))                                      
-                    except TypeError as e:                        
-                        self.m_logger.error("[TypeError] Error preparing class data: {}".format(e))
+                            self.m_logger.error("Error writing small classfit table to disk {}".format(e))                       
                     except Exception as e:                        
-                        self.m_logger.error("[Exception] Error preparing class data: {}".format(e))
+                        self.m_logger.error("[Exception] Error preparing class data: {}".format(e))                    
+                        self.m_logger.error("\nEXCEPTION\n-------------------------------------")
+                        traceback.print_exc()
+                        self.m_logger.error("\n-------------------------------------")                                                                    
+
         # Delete norm data
         # try:
         #     if os.path.exists(self.m_norm_path) and self.m_norm_path:

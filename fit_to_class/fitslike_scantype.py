@@ -34,7 +34,7 @@ class ScanType:
 
     def get_str_type(self, p_type) -> str:
         for key, value in self.__types.items():
-            if p_type == key:
+            if p_type == value:
                 return key
         return "Unknown"
 
