@@ -16,18 +16,18 @@
     },
 
     "subscan_parsing":{
-        "enabled": false
+        "enabled": true
     },
 
     "signal_grouping":{
-        "enabled": false
+        "enabled": true
     },
 
     "data_calibration":{
-        "enabled": false
+        "enabled": true
     },
 
     "classfit_conversion":{
-        "enabled": false
+        "enabled": true
     }
 }
