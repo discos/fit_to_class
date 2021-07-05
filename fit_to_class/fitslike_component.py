@@ -5,7 +5,7 @@ Created on Fri Feb  7 12:15:50 2020
 
 @author: debbio
 """
-from fitslike_commons import Fitslike_commons
+from fit_to_class import Fitslike_commons
 
 
 class Fitslike_component():

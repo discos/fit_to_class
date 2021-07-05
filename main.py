@@ -37,7 +37,7 @@ def run():
     parser.add_argument("folder", help= "Subscan folder")
     # Type and geometry
     parser.add_argument("-t","--type", help= "Subscan types: " + str(scan_options.available_scan_types) ,\
-                        choices= scan_options.available_scan_types, default= 'ONOFF')
+                        choices= scan_options.available_scan_types)
     parser.add_argument("-g", "--geometry", help="Define scan geometry rules: " + scan_options.scan_geo_rules , type= str, default= "")    
     # Specific feed 
     parser.add_argument("-fd", "--feed", help="Which feed to be parsed( it'll parse just one feed)", type=int, default= None)    

@@ -37,7 +37,7 @@ class ScanOptions:
                 "Output Path " + self._output_path +"\n"\
                 "Scan option conf path" + self.scan_conf_path + "\n"\
                 "Scan Type: " + ScanOptions.scan_types.get_str_type(self.type) +"\n"\
-                "Geometry: " + str(self.geometry) +"\n"\
+                "Geometry: " + str(self.geometry.get_geometry()) +"\n"\
                 "Feed: " + str(self.feed) +"\n"\
                 "parallelism: " + str(self.parallel) + "\n"
 

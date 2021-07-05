@@ -149,7 +149,23 @@ class Fitslike_handler():
 
     def get_summary(self):
         """Getter summary"""
-        return self.m_summary
+        if not 'summary' in self.m_summary:
+            return None
+        return self.m_summary['summary']
+
+    def get_geometry_definition(self) -> str:
+        """Returns geometry definition as in summary if present"""        
+        _summary= self.get_summary()
+        if 'geometry' in _summary:
+            return _summary['geometry']
+        return ""
+
+    def get_scan_type(self) -> str:
+        """Returns scan type definition as in summary if present"""
+        _summary= self.get_summary()
+        if 'scan_type' in _summary:
+            return _summary['scan_type']
+        return ""
 
     def has_critical_error(self) -> bool:
         return self._critical_error

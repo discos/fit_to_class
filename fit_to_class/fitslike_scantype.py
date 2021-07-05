@@ -38,4 +38,9 @@ class ScanType:
                 return key
         return "Unknown"
 
+    @staticmethod
+    def is_valid(p_type):
+        if p_type == ScanTypes.NOTVALID:
+            return False
+        return True
     

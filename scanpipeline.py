@@ -16,6 +16,7 @@ import scanoptions
 class PipelineTasks(Enum):
     """ Pipeline enum tasks """
     SUBSCAN_LIST= "subscan_list"
+    PRE_PARSING= "pre_parsing"
     FITSLIKE_HANDLER= "fitslike_handler"
     SUBSCAN_PARSING= "subscan_parsing"
     GEOMETRY_GROUPING= "geomertry_grouping"
@@ -112,6 +113,13 @@ class ScanPipeline:
                         "enabled" : False
                     })
         )
+        # Pre parsing summary
+        _list.append(( PipelineTasks.PRE_PARSING,
+                    {     
+                        "task": self._pipeline_pre_parsing,
+                        "enabled" : False
+                    })
+        )
         # Geometry grouping
         _list.append((PipelineTasks.GEOMETRY_GROUPING,
                     {
@@ -194,15 +202,20 @@ class ScanPipeline:
             if _enabled: 
                 self._pipeline_task_set_enabled(_task_sublist)            
             self._scan_pipeline.append(_task_sublist)    
-        if self._scan_options._type == ScanTypes.ONOFF or\
-            self._scan_options._type == ScanTypes.NODDING:
-            # Geometry grouping
-            _task_geo= self._pipeline_find_task(PipelineTasks.GEOMETRY_GROUPING)
-            if _task_geo:
-                _enabled= self._conf_task_is_enabled(PipelineTasks.GEOMETRY_GROUPING)
-                if _enabled: 
-                    self._pipeline_task_set_enabled(_task_geo)
-                self._scan_pipeline.append(_task_geo)                        
+        # Summary pre scan
+        _task_pre_parsing= self._pipeline_find_task(PipelineTasks.PRE_PARSING) 
+        if _task_pre_parsing:            
+            _enabled= self._conf_task_is_enabled(PipelineTasks.PRE_PARSING)
+            if _enabled: 
+                self._pipeline_task_set_enabled(_task_pre_parsing)
+            self._scan_pipeline.append(_task_pre_parsing)    
+        # Geometry grouping        
+        _task_geo= self._pipeline_find_task(PipelineTasks.GEOMETRY_GROUPING)
+        if _task_geo:
+            _enabled= self._conf_task_is_enabled(PipelineTasks.GEOMETRY_GROUPING)
+            if _enabled: 
+                self._pipeline_task_set_enabled(_task_geo)
+            self._scan_pipeline.append(_task_geo)                        
         # Scan files, mandatory
         _task_scan= self._pipeline_find_task(PipelineTasks.SUBSCAN_PARSING)        
         if _task_scan:
@@ -296,10 +309,10 @@ class ScanPipeline:
             try:
                 p_task[_key](self._scan_context)
             except Exception as e:                                
+                self._pipeline_errors= True
                 self._logger.error("Error on task {}:\n {}".format(self._pipeline_task_name(p_task), str(e)))
                 _exc_info= sys.exc_info()
-                traceback.print_exc(*_exc_info)
-                self._pipeline_errors= True
+                traceback.print_exc(*_exc_info)                
             finally:                
                 return
         # Unknwon task
@@ -337,9 +350,62 @@ class ScanPipeline:
         self._scan_list['subscan']= [f for f in files_fits if 'summary' not in f]
         # Print
         #self._subscan_list_print()
-                
-    def _pipeline_geometry_grouping(self, p_scan_context) -> None:
+            
+    def _pipeline_pre_parsing(self, p_scan_context) -> None:
         """
+        Before joining subscans by geo it looks into summary.fits
+        for:
+            - geometry keyword
+            - scan type keyword
+        """
+        self._logger.info("\nPIPELINE EXECUTING: {}".format(PipelineTasks.PRE_PARSING))
+        # Check summary enlisted
+        if 'summary' not in self._scan_list:
+            self._logger.error(f"Missing summary.fits from input folder!")            
+            raise Exception("Missing summary.fits from input folder!")
+        # scanning only summary
+        if self._scan_list['summary']:
+            self._logger.info(f"Pre parsing summary.fits")                                    
+            _fh= fitslike_handler.Fitslike_handler( self._scan_options.raw,\
+                                                    self._scan_options.geometry,\
+                                                    self._scan_options.type,\
+                                                    self._scan_options.feed,\
+                                                    self._scan_options.parallel)                        
+            _summary_group= {}
+            _summary_group['summary']= self._scan_list['summary']
+            _summary_group['subscan']= []
+            try:
+                _fh.scan_data(_summary_group)
+            except Exception as e:                
+                self._logger.error(f"Exception on summary pre scan {str(e)}")
+                raise Exception(f"Exception on summary pre scan {str(e)}")
+            # Review scan options (geometry , type)
+            # Geometry from command line has priority over geometry from summary                        
+            _geo_summary= _fh.get_geometry_definition()            
+            self._logger.info(f"Geometry definition from summary.fits: {_geo_summary}")
+            if not self._scan_options.geometry.get_geometry():
+                # Check if summary has geometry info
+                if not _geo_summary:
+                    raise Exception("Missing geometry input definition!")
+                self._scan_options.geometry= _geo_summary
+                self._logger.info("Using geometry definition from summary.fits")                
+            else: 
+                self._logger.info("Using geometry definition from command line")                                    
+            # Scan type
+            _scan_type_summary= _fh.get_scan_type()
+            self._logger.info(f"Scan type definition from summary.fits: {_scan_type_summary}")
+            if not ScanType.is_valid(self._scan_options.type):
+                # Check if summary has scan_type info
+                if not _scan_type_summary:
+                    raise Exception("Missing scan type input definition!")
+                self._scan_options.type= _scan_type_summary
+                self._logger.info("Using scan type definition from summary.fits")
+            else: 
+                self._logger.info("Using scan type definition from command line")                        
+            
+
+    def _pipeline_geometry_grouping(self, p_scan_context) -> None:
+        """        
         Subscan group by geometry definitions
         Raise exception if errors
 

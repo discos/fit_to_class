@@ -3,6 +3,10 @@
         "enabled": true
     },
 
+    "pre_parsing":{
+        "enabled": true
+    },
+
     "geomertry_grouping":{
         "enabled": true
     },
@@ -12,18 +16,18 @@
     },
 
     "subscan_parsing":{
-        "enabled": true
+        "enabled": false
     },
 
     "signal_grouping":{
-        "enabled": true
+        "enabled": false
     },
 
     "data_calibration":{
-        "enabled": true
+        "enabled": false
     },
 
     "classfit_conversion":{
-        "enabled": true
+        "enabled": false
     }
 }

@@ -11,10 +11,12 @@
 	 "components": {
     	"summary":{
         	"parser":{
-            	"sum_restfreq":["PRIMARY", "HEADER", "RESTFREQ1"],                        	
+				"geometry":["PRIMARY", "HEADER", "GEOMETRY"],
+				"scan_type":["PRIMARY", "HEADER", "scan_type"],
+            	"sum_restfreq":["PRIMARY", "HEADER", "RESTFREQ1"],
             	"sum_backend_name": ["PRIMARY", "HEADER", "BackendName"],
             	"target_ra": ["PRIMARY", "HEADER", "RightAscension"],
-            	"target_dec": ["PRIMARY", "HEADER", "Declination"]
+            	"target_dec": ["PRIMARY", "HEADER", "Declination"]				
         	}
     	},
 		"observation": {		

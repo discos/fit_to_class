@@ -174,15 +174,17 @@ class Awarness_fitszilla():
     def _process_summary(self):
         """
         Keywords from summary.fits
-        """
-        l_keys= [ 'restfreq', 'backend_name', 'target_ra', 'target_dec' ]
+        """        
+        l_keys= [ 'geometry', 'scan_type','restfreq', 'backend_name', 'target_ra', 'target_dec' ]
+        _geometry= wrapkeys.get_value(self.m_intermediate,'geometry') 
+        _scan_type= wrapkeys.get_value(self.m_intermediate,'scan_type') 
         l_restFreq= wrapkeys.get_value(self.m_intermediate, 'sum_restfreq') * unit.MHz
         l_target_ra= wrapkeys.get_value(self.m_intermediate,'target_ra') * unit.rad
-        l_target_dec= wrapkeys.get_value(self.m_intermediate,'target_dec') * unit.rad
+        l_target_dec= wrapkeys.get_value(self.m_intermediate,'target_dec') * unit.rad        
         if self.m_intermediate['sum_backend_name']== 0.0:
             self.m_intermediate['sum_backend_name']= 'UNKNOWN'
             self._errorFromMissingKeyword('scheduled', 'obs_backend_name')
-        l_values= [l_restFreq, self.m_intermediate['sum_backend_name'], l_target_ra, l_target_dec]
+        l_values= [_geometry, _scan_type, l_restFreq, self.m_intermediate['sum_backend_name'], l_target_ra, l_target_dec]
         self.m_processedRepr['summary']= dict(zip(l_keys, l_values))
         #print(self.m_processedRepr['summary'])
 
@@ -679,8 +681,7 @@ class Awarness_fitszilla():
                                 l_pol_table.add_column(col)
 
                         except Exception as e:
-                            self.m_logger.error("Exception creating data tables for stokes data : {}".format(e) )
-                            pdb.set_trace()
+                            self.m_logger.error("Exception creating data tables for stokes data : {}".format(e) )                            
                             continue
                         # Add this pol table to table list
                         l_tGroupPol.append(l_pol_table)
