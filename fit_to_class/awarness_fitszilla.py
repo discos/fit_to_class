@@ -570,14 +570,12 @@ class Awarness_fitszilla():
             ----------
             p_sub : astropy table group
                 group with flag_cal
-
             p_subscan : subscan with meta data
                 group with flag_cal
 
             Returns
             -------
             true calibrazione attiva
-
             """
             l_signal= p_subscan['scheduled']['signal']
             if l_signal in kws['keys_cal_on']:
@@ -590,38 +588,56 @@ class Awarness_fitszilla():
             #    return True
             return False
 
-        def _is_on(p_subScan, p_feed):
+        def _is_on(p_subscan, p_feed):
             """
-            Verifica se la subscan è un on o un off
+            @TODO Check according to appropriate keyword
+            The main signal keyword refers to central feed (feed 0)
+            if an appropriate feed reference is not provided through
+            a dedicated fitszilla keyword.            
 
             Parameters
             ----------
             p_subscan : dict
                 subscan ch_x
-
-            p_subscan : subscan with meta data
+            p_feed : subscan with meta data
                 group with flag_cal
-
 
             Returns
             -------
             None.
-
-            """
-            l_signal= p_subScan['scheduled']['signal']            
-            if l_signal in kws['keys_on']:
+            """                        
+            if 'scheduled' not in p_subscan:
+                raise Exception("Cannot continue without mandatory keywords [scheduled]")
+            # Signal value
+            if 'signal' not in p_subscan['scheduled']:                
+                raise Exception("Cannot continue without mandatory keywords [scheduled][signal]")
+            _signal_value= p_subscan['scheduled']['signal']
+            if _signal_value == None :
+                self.m_logger.warning("Signal keyword not present using offset to set is_on flag!")
+                try:
+                    _az_offset= p_subscan['ccordinates']['az_offset']
+                    return _az_offset > 1e-4 * unit.rad        
+                except KeyError as e:
+                    raise Exception("Cannot continue without mandatory keywords ['ccordinates']['az_offset']")
+            # Reference feed, this keyword is not mandatory
+            _reference_feed= 0
+            if 'reference_feed' not in p_subscan['scheduled']:
+                self.m_logger.warn("Reference feed number relating to SIGNAL keyword is missing [scheduled][reference_feed]")
+            else:
+                _reference_feed= int(self.p_subscan['scheduled']['reference_feed'])            
+            #  SIGNAL keywords checking
+            if _signal_value in kws['keys_on']:
+                # Signal key is related to 'On source' context
                 if p_feed == 0:
                     return True
                 else:
                     return False
             else:
+                # Signal key is NOT related to 'On source' context
                 if p_feed == 0:
                     return False
                 else:
-                    return True
-            if l_signal == None :
-                self.m_logger.warning("Signal keyword not present using offset to set is_on flag!")
-                return p_subScan['ccordinates']['az_offset'] > 1e-4 * unit.rad
+                    return True            
 
         # Start function
 
