@@ -670,8 +670,9 @@ class Fitslike_handler():
                     # ONLY 1 table per pol!
                     try:                                                             
                         # Data retreiving one level up from 'on' data
-                        if 'calibrated' in _section_pols[pol].keys():
-                            calibrated_data_path= _section_pols[pol]['calibrated']                                
+                        #pdb.set_trace()
+                        if 'counts' in _section_pols[pol].keys():
+                            calibrated_data_path= _section_pols[pol]['counts']                                
                             self.m_logger.info("Loading normalized {}-{}-{} path {}".format(_feed, _section, pol,calibrated_data_path))
                             if calibrated_data_path: 
                                 _polarization_table= QTable.read(calibrated_data_path, memmap= True)
