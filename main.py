@@ -5,6 +5,7 @@ converter entry point
 """
 
 import argparse
+from fit_to_class.log_formatter import LogFormatter
 import logging
 import warnings
 from astropy.utils.exceptions import AstropyWarning
@@ -20,10 +21,9 @@ def run():
     warnings.simplefilter('ignore', AstropyWarning)
     # Logger
     l_commons = fitslike_commons.Fitslike_commons()    
-    l_logger = logging.getLogger(l_commons.logger_name())
-    l_formatter =logging.Formatter('[%(filename)s:%(lineno)s - %(funcName)s() ] %(message)s')
+    l_logger = logging.getLogger(l_commons.logger_name())    
     l_logCh = logging.StreamHandler()            
-    l_logCh.setFormatter(l_formatter)
+    l_logCh.setFormatter(LogFormatter())
     l_logger.setLevel(logging.DEBUG)
     if not len(l_logger.handlers):
         l_logger.addHandler(l_logCh)
