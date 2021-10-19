@@ -389,7 +389,7 @@ class Fitslike_handler():
         # Deleting intermediate folder
                 
 
-    def normalize(self):
+    def normalize(self, p_type:str ="cal") -> None:
         """
         On - Off - Cal normalize
 
@@ -416,6 +416,11 @@ class Fitslike_handler():
             calibrationFactor= 1 / [calOnNorm, calOffNorm] * cal_temp
 
             normalized= on * calibrationFactor
+
+        p_type: str
+        Calculation type, counts or kelvin
+        "cal": kelvin
+        "counts": counts
 
         If cal_on/cal_off are missing or off are missing simply it skips calculations,
         and provides only signal data table to:
@@ -527,10 +532,14 @@ class Fitslike_handler():
                             _on_off_possible= True
                             self.m_logger.info("[{}][{}][{}] Reference data are present".format(_feed,ch,pol))
                             _calibration_possible= False
-                            if _calMarkTemp:
-                                if len(_data['cal_on']) and len(_data['cal_off']):
+                            if _calMarkTemp:                                
+                                if len(_data['cal_on']) or len(_data['cal_off']):
                                     _calibration_possible= True
                                     self.m_logger.info("[{}][{}][{}] Calibration data are present".format(_feed,ch,pol))
+                                else:
+                                    self.m_logger.warning("[{}][{}][{}] No cal_on and cal_of available?".format(_feed,ch,pol))    
+                            else:
+                                self.m_logger.warning("[{}][{}][{}] No calibration mark temperature available".format(_feed,ch,pol))
                     #
                     if not _data_raw:
                         self.m_logger.warning("[{}][{}][{}] No input data, skipping".format(_feed,ch,pol))
@@ -540,21 +549,33 @@ class Fitslike_handler():
                     # Calc with units..review
                     # Keep data as small as possible (numpy.float32)
                     try:                        
-                        if _calibration_possible:
+                        if _calibration_possible and p_type == "cal":                            
                             # Complete calibration
                             # On Off
+                            self.m_logger.info("[{}][{}][{}] Trying Kelvin calculations".format(_feed,ch,pol))
                             _signal= _data['signal']
-                            _reference= _data['reference']
+                            _reference= _data['reference']                                                        
                             _data['on_off']= (_signal -_reference) / _reference                            
                             # Calibration factor
-                            _cal = np.concatenate((_data['cal_on'], _data['cal_off']))                            
+                            # Np arrays, assuming data from QTable has shape[[data]]
+                            _calon= np.array([])
+                            try:
+                                _calon= _data['cal_on'].data[0]
+                            except:
+                                pass
+                            _caloff= np.array([])
+                            try:
+                                _caloff= _data['cal_off'].data[0]
+                            except:
+                                pass
+                            _cal = np.concatenate((_calon,_caloff))
                             if len(_cal) == 0:
                                 continue
                             good =  ~np.isnan(_cal) & ~np.isinf(_cal)
-                            _cal = _cal[good]                            
+                            _cal = _cal[good]                                                        
                             if len(_cal) > 0:
-                                meancal = np.median(_cal) if len(_cal) > 30 else np.mean(_cal)                                
-                                calibration_factor = 1 / meancal * _calMarkTemp             
+                                meancal = np.median(_cal) if len(_cal) > 30 else np.mean(_cal)                                                                
+                                calibration_factor = 1 / meancal * _calMarkTemp                                             
                                 calibration_factor= np.float32(calibration_factor.value)* calibration_factor.unit
                             else:
                                 continue                              
@@ -570,6 +591,7 @@ class Fitslike_handler():
                             _section_pols[pol]['calibrated']= _file_path
                             _opened_tables['signal'].write(_file_path, overwrite= True)                                                        
                         elif _on_off_possible:
+                            self.m_logger.info("[{}][{}][{}] Trying Counts calculations".format(_feed,ch,pol))
                             # Only counts
                             _signal= _data['signal']
                             _reference= _data['reference']
@@ -610,21 +632,24 @@ class Fitslike_handler():
         #     shutil.rmtree(self.m_group_path, ignore_errors= True)
                         
                     
-    def ClassFitsAdaptations(self):
+    def ClassFitsAdaptations(self, p_type:str ="cal")->None:
         """
+        p_type: str
+        Conversione dati kelvin oppure altro tipo
+        "cal": dati kelvin
+        "counts": conteggi
+
         Raw data groups stored as :
             self.m_group_on_off_cal[_feed][_section]['pols'][LL LR RL RR][on off cal_on cal off]
 
-        On disk we have a folder relative to oputput path:
+        On disk we have a folder relative to output path:
             output_path/fits_groups, folder where table data (disk part) are grouped by feed section pol on off cal
-            output_path/fits_norms, folder where grouped data produce a calibrated measures ( if cal is present, counts otherwise )
+            output_path/fits_norms, folder where grouped data produce a calibrated measures (if cal is present, counts otherwise)
             output_path/classfits, single, calibrated classfits file boxing every feed and pol
 
         Conversion tips:
-             desired cooord in az, el o ra, dec
+            desired cooord in az, el o ra, dec
             observed coord in crdelt2,3
-
-
         """
 
         def getQTableColWithUnit(p_table, p_col, p_unit):
@@ -639,7 +664,8 @@ class Fitslike_handler():
                         return data
 
         # Work folder
-        self.m_class_path= os.path.join(self.m_outputPath, 'classfits')
+        _folder_name= 'classfits_{}'.format(p_type)
+        self.m_class_path= os.path.join(self.m_outputPath, _folder_name)
         if os.path.exists(self.m_class_path):
             shutil.rmtree(self.m_class_path)
         os.mkdir(self.m_class_path)
@@ -671,23 +697,25 @@ class Fitslike_handler():
                     try:                                                             
                         # Data retreiving one level up from 'on' data
                         #pdb.set_trace()
-                        if 'counts' in _section_pols[pol].keys():
-                            calibrated_data_path= _section_pols[pol]['counts']                                
-                            self.m_logger.info("Loading normalized {}-{}-{} path {}".format(_feed, _section, pol,calibrated_data_path))
-                            if calibrated_data_path: 
-                                _polarization_table= QTable.read(calibrated_data_path, memmap= True)
-                                calibration_type= 'calibrated'
-                            else:
-                                self.m_logger.info("calibrated for {}-{}-{} is empty".format(_feed, _section, pol))                                    
+                        if p_type == "cal":
+                            if 'calibrated' in _section_pols[pol].keys():
+                                calibrated_data_path= _section_pols[pol]['calibrated']                                
+                                self.m_logger.info("Loading normalized {}-{}-{} path {}".format(_feed, _section, pol,calibrated_data_path))
+                                if calibrated_data_path: 
+                                    _polarization_table= QTable.read(calibrated_data_path, memmap= True)
+                                    calibration_type= 'calibrated'
+                                else:
+                                    self.m_logger.info("calibrated for {}-{}-{} is empty".format(_feed, _section, pol))                                    
                                 
-                        if  not _polarization_table and 'on_off' in _section_pols[pol].keys():
-                            on_off_data_table_path= _section_pols[pol]['on_off']
-                            self.m_logger.info("Loading on_off {}-{}-{} path {}".format(_feed, _section, pol,on_off_data_table_path))
-                            if on_off_data_table_path:
-                                _polarization_table= QTable.read(on_off_data_table_path, memmap= True)
-                                calibration_type= 'on_off'                                
-                            else:
-                                self.m_logger.info("on_off data for {}-{}-{} is empty".format(_feed, _section, pol))    
+                        if p_type == "counts":
+                            if  not _polarization_table and 'counts' in _section_pols[pol].keys():
+                                on_off_data_table_path= _section_pols[pol]['counts']
+                                self.m_logger.info("Loading counts {}-{}-{} path {}".format(_feed, _section, pol,on_off_data_table_path))
+                                if on_off_data_table_path:
+                                    _polarization_table= QTable.read(on_off_data_table_path, memmap= True)
+                                    calibration_type= 'counts'                                
+                                else:
+                                    self.m_logger.info("on_off data for {}-{}-{} is empty".format(_feed, _section, pol))    
                                 
                         if not _polarization_table and 'signal' in _section_pols[pol].keys():
                             signa_data_path= _section_pols[pol]['signal']
@@ -824,12 +852,12 @@ class Fitslike_handler():
                                 _class_table.add_column( Column(data= _class_data[col], name= col) )
                             except ValueError as e:
                                 self.m_logger.error("Exception adding column [{}] to classfit converted table {}".format(col, e))
-                        # Table name generation                        
+                        # Table name generation                                                
                         _class_name= '{}_{}_{}_{}_class.fits'.format(_feed, _section, pol, calibration_type)       
                         _class_path= os.path.join(_feed_path, _class_name)
                         self.m_logger.info("class table path: {}".format(_class_path))
                         try:                            
-                            self.classfitsWrite(_class_path, _class_table)
+                            self.classfitsWrite(_class_path, _class_table, p_type)
                         except ValueError as e:                            
                             self.m_logger.error("Error writing small classfit table to disk {}".format(e))                       
                     except Exception as e:                        
@@ -846,7 +874,7 @@ class Fitslike_handler():
         #         self.m_logger.error("Error cleaning normalized data folder: {}\n {}\n".format(self.m_norm_path, e))
 
 
-    def classfitsWrite(self, p_file_name, p_class_table):
+    def classfitsWrite(self, p_file_name, p_class_table, p_cal_type:str ="cal"):
         """
         Convert Qtable classfits column to fits file format adding appropriate
         header data
@@ -857,6 +885,8 @@ class Fitslike_handler():
             Output file name
         p_class_table: string
             QTable with clasfits data            
+        p_cal_type: string
+            Calibratin type
         """              
         _newCols=[]
         # for every column expressed in classfits definition ..
@@ -873,11 +903,15 @@ class Fitslike_handler():
                 _columnFound= True                
             try:
                 # adding column to classfits if fitszilla representation matches it
-                if _columnFound:
+                if _columnFound:                   
                     # some fields needs dedicated approach 
                     if classCol[0] == "SPECTRUM":
+                        # checking calibration type, then adjust SPECTRUM's unit
+                        _unit= classCol[2]
+                        if p_cal_type == "counts":
+                            _unit= "Counts"  
                         _rows= p_class_table[_inferredCol][0].shape[0]
-                        _newCols.append(fits.Column(array= p_class_table[_inferredCol],name= classCol[0],format= "{}D".format(_rows),unit= classCol[2]))
+                        _newCols.append(fits.Column(array= p_class_table[_inferredCol],name= classCol[0],format= "{}D".format(_rows),unit= _unit))
                     else:
                         _newCols.append(fits.Column(array= p_class_table[_inferredCol],name= classCol[0],format= classCol[1],unit= classCol[2]) )
 

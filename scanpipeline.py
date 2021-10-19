@@ -22,7 +22,9 @@ class PipelineTasks(Enum):
     GEOMETRY_GROUPING= "geomertry_grouping"
     SIGNAL_GROUPING= "signal_grouping"
     DATA_CALIBRATION= "data_calibration"
+    DATA_CALIBRATION_COUNTS= "data_calibration_counts"
     CLASSFITS_CONVERSION ="classfit_conversion"
+    CLASSFITS_CONVERSION_COUNTS ="classfit_conversion_counts"
 
 class ScanPipeline:
     """
@@ -107,14 +109,14 @@ class ScanPipeline:
         }
         self._scan_list_group= []
         # Filter subscan folder
-        _list.append(( PipelineTasks.SUBSCAN_LIST,
+        _list.append((PipelineTasks.SUBSCAN_LIST,
                     {     
                         "task": self._pipeline_subscan_list,
                         "enabled" : False
                     })
         )
         # Pre parsing summary
-        _list.append(( PipelineTasks.PRE_PARSING,
+        _list.append((PipelineTasks.PRE_PARSING,
                     {     
                         "task": self._pipeline_pre_parsing,
                         "enabled" : False
@@ -141,6 +143,20 @@ class ScanPipeline:
                         "enabled" : False
                     })
         )
+        # Normalize values 
+        _list.append((PipelineTasks.DATA_CALIBRATION_COUNTS,
+                    {            
+                        "task": self._pipeline_normalize_counts,
+                        "enabled" : False
+                    })
+        )
+        # Classfits conversion counts
+        _list.append((PipelineTasks.CLASSFITS_CONVERSION_COUNTS,
+                    {                    
+                        "task": self._pipeline_classfits_counts,
+                        "enabled" : False
+                    })
+        )
         # Normalize values
         _list.append((PipelineTasks.DATA_CALIBRATION,
                     {            
@@ -148,7 +164,8 @@ class ScanPipeline:
                         "enabled" : False
                     })
         )
-        # Classfits conversion
+
+        # Classfits conversion full
         _list.append((PipelineTasks.CLASSFITS_CONVERSION,
                     {                    
                         "task": self._pipeline_classfits,
@@ -239,6 +256,13 @@ class ScanPipeline:
                 if _enabled: 
                     self._pipeline_task_set_enabled(_task_classfits)
                 self._scan_pipeline.append(_task_classfits) 
+            # Classfits conversion counts
+            _task_classfits_counts= self._pipeline_find_task(PipelineTasks.CLASSFITS_CONVERSION_COUNTS)
+            if _task_classfits_counts:
+                _enabled= self._conf_task_is_enabled(PipelineTasks.CLASSFITS_CONVERSION_COUNTS)
+                if _enabled: 
+                    self._pipeline_task_set_enabled(_task_classfits_counts)
+                self._scan_pipeline.append(_task_classfits_counts) 
         else:             
             # Signal ref grouping
             _task_signal= self._pipeline_find_task(PipelineTasks.SIGNAL_GROUPING)
@@ -247,6 +271,20 @@ class ScanPipeline:
                 if _enabled: 
                     self._pipeline_task_set_enabled(_task_signal)
                 self._scan_pipeline.append(_task_signal) 
+            # Data normalization counts
+            _task_norm_counts= self._pipeline_find_task(PipelineTasks.DATA_CALIBRATION_COUNTS)
+            if _task_norm_counts:
+                _enabled= self._conf_task_is_enabled(PipelineTasks.DATA_CALIBRATION_COUNTS)
+                if _enabled: 
+                    self._pipeline_task_set_enabled(_task_norm_counts)
+                self._scan_pipeline.append(_task_norm_counts) 
+            # Classfits conversion counts
+            _task_classfits_counts= self._pipeline_find_task(PipelineTasks.CLASSFITS_CONVERSION_COUNTS)
+            if _task_classfits_counts:
+                _enabled= self._conf_task_is_enabled(PipelineTasks.CLASSFITS_CONVERSION_COUNTS)
+                if _enabled: 
+                    self._pipeline_task_set_enabled(_task_classfits_counts)
+                self._scan_pipeline.append(_task_classfits_counts) 
             # Data normalization
             _task_norm= self._pipeline_find_task(PipelineTasks.DATA_CALIBRATION)
             if _task_norm:
@@ -509,7 +547,32 @@ class ScanPipeline:
                         self._logger.error("\n-------------------------------------")
                 else:
                     self._logger.error(f"Missing fitslike handler for group {_geo_group['group_id']}")                    
-                    
+
+
+    def _pipeline_normalize_counts(self,p_scan_context) -> None:
+        """
+        Normalize data
+        Raise exception if errors
+
+        p_scan_contex: dict, pipeline data
+        """
+        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.DATA_CALIBRATION_COUNTS))
+        # Traversing scan groups
+        if self._scan_list_group:            
+            for _geo_group in self._scan_list_group:             
+                self._logger.info(f"On Off Call for group {_geo_group['group_id']}")                   
+                # FH, fitslike_handler contains scan data for the given geo group
+                if 'fh' in _geo_group:
+                    try:
+                        _geo_group['fh'].normalize("counts")
+                    except Exception as e:
+                        self._logger.error(f"Exception on data counts {str(e)}")
+                        self._logger.error("\nEXCEPTION\n-------------------------------------")
+                        _exc_info= sys.exc_info()                    
+                        traceback.print_exc()
+                        self._logger.error("\n-------------------------------------")
+                else:
+                    self._logger.error(f"Missing fitslike handler for group {_geo_group['group_id']}")            
 
     def _pipeline_normalize(self,p_scan_context) -> None:
         """
@@ -526,7 +589,7 @@ class ScanPipeline:
                 # FH, fitslike_handler contains scan data for the given geo group
                 if 'fh' in _geo_group:
                     try:
-                        _geo_group['fh'].normalize()
+                        _geo_group['fh'].normalize("cal")
                     except Exception as e:
                         self._logger.error(f"Exception on data calibration {str(e)}")
                         self._logger.error("\nEXCEPTION\n-------------------------------------")
@@ -536,6 +599,31 @@ class ScanPipeline:
                 else:
                     self._logger.error(f"Missing fitslike handler for group {_geo_group['group_id']}")    
         
+
+    def _pipeline_classfits_counts(self,p_scan_context) -> None:
+        """
+        Classfits conversions from counts instead of Kelvin
+        Raise exception if errors
+
+        p_scan_contex: dict, pipeline data
+        """
+        self._logger.info("PIPELINE EXECUTING: {}\n".format(PipelineTasks.CLASSFITS_CONVERSION_COUNTS))
+        # Traversing scan groups
+        if self._scan_list_group:            
+            for _geo_group in self._scan_list_group:             
+                self._logger.info(f"On Off Call for group {_geo_group['group_id']}")                   
+                # FH, fitslike_handler contains scan data for the given geo group                
+                if 'fh' in _geo_group:
+                    try:
+                        _geo_group['fh'].ClassFitsAdaptations("counts")
+                    except Exception as e:
+                        self._logger.error(f"Exception on data conversion to classfit counts {str(e)}")
+                        self._logger.error("\nEXCEPTION\n-------------------------------------")
+                        _exc_info= sys.exc_info()                    
+                        traceback.print_exc()
+                        self._logger.error("\n-------------------------------------")
+                else:
+                    self._logger.error(f"Missing fitslike handler for group {_geo_group['group_id']}")
     
     def _pipeline_classfits(self,p_scan_context) -> None:
         """
@@ -552,7 +640,7 @@ class ScanPipeline:
                 # FH, fitslike_handler contains scan data for the given geo group
                 if 'fh' in _geo_group:
                     try:
-                        _geo_group['fh'].ClassFitsAdaptations()
+                        _geo_group['fh'].ClassFitsAdaptations("cal")
                     except Exception as e:
                         self._logger.error(f"Exception on data conversion to classfit {str(e)}")
                         self._logger.error("\nEXCEPTION\n-------------------------------------")

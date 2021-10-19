@@ -23,7 +23,15 @@
         "enabled": true
     },
 
+    "data_calibration_counts":{
+        "enabled": true
+    },
+
     "data_calibration":{
+        "enabled": true
+    },
+
+    "classfit_conversion_counts":{
         "enabled": true
     },
 
