@@ -23,3 +23,5 @@ def get_value(p_dict, p_key, p_raise= True):
     if p_dict[p_key]== None:
         raise Exception(f"Key with unacceptable None value: {p_key}")
     return p_dict[p_key]
+
+    

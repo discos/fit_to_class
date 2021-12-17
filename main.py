@@ -24,7 +24,7 @@ def run():
     l_logger = logging.getLogger(l_commons.logger_name())    
     l_logCh = logging.StreamHandler()            
     l_logCh.setFormatter(LogFormatter())
-    l_logger.setLevel(logging.DEBUG)
+    l_logger.setLevel(logging.WARNING)
     if not len(l_logger.handlers):
         l_logger.addHandler(l_logCh)
 

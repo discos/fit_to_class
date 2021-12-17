@@ -24,15 +24,15 @@
     },
 
     "data_calibration_counts":{
-        "enabled": true
+        "enabled": false
     },
 
     "data_calibration":{
-        "enabled": true
+        "enabled": false
     },
 
     "classfit_conversion_counts":{
-        "enabled": true
+        "enabled": false
     },
 
     "classfit_conversion":{

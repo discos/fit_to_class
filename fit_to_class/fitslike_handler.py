@@ -769,7 +769,7 @@ class Fitslike_handler():
                         _timeMjd= Time(_tMjd, format='mjd', scale='utc')                        
                         _class_data['UT']= ( _tMjd - np.floor(_tMjd)) * 86400                        
                         # date
-                        _class_data['DATE-OBS']= _timeMjd.strftime('%d/%m/%y')
+                        _class_data['DATE-OBS']= _timeMjd.strftime('%Y-%m-%dT00:00:00.000')                        
                         # lsts
                         _lsts= _timeMjd.sidereal_time('apparent', \
                                   fitslike_commons.Fitslike_commons.\
@@ -806,7 +806,19 @@ class Fitslike_handler():
                                                     _class_data['CDELT1'] * (_section_data['backend']['bins']/2 +1)
                                 _class_data['RESTFREQ']= _class_data['RESTFREQ'].value
                         self.m_obs_genera_data['restfreq']= _class_data['RESTFREQ']
-                        _class_data['VELOCITY']= _section_data['scheduled']['vlsr'].to("m/s").value
+                        # Versione chiave singola VELO-FRAME
+                        #  self.m_summary['summary']['velo_frame']
+                        # Dato velocità da summary.VRAD
+                        # se manca sul summary : _section_data['scheduled']['vlsr']
+                        _velo_keyword="VELO-{}".format(self.m_summary['summary']['velo_frame'])
+                        _class_data['VELOCITY']= _velo_keyword
+                        self.m_logger.info("Velo column name {}".format(_velo_keyword))
+                        if self.m_summary['summary']['velo_rad'] != .0:
+                            self.m_logger.warn("Velocity taken from summary.velo_rad {}".format(self.m_summary['summary']['velo_rad']))
+                            _class_data[_velo_keyword]= self.m_summary['summary']['velo_rad'].to("m/s").value                        
+                        else:
+                            self.m_logger.warn("Velocity taken from observed.vlsr {}".format(_section_data['scheduled']['vlsr']))
+                            _class_data[_velo_keyword]= _section_data['scheduled']['vlsr'].to("m/s").value
                         _df= (_section_data['backend']['bandwidth'] / _section_data['backend']['bins']).to('Hz')
                         _class_data['CDELT1']= _df.value
                         self.m_obs_genera_data['cdelt1']= _class_data['CDELT1']
@@ -912,11 +924,16 @@ class Fitslike_handler():
                             _unit= "Counts"  
                         _rows= p_class_table[_inferredCol][0].shape[0]
                         _newCols.append(fits.Column(array= p_class_table[_inferredCol],name= classCol[0],format= "{}D".format(_rows),unit= _unit))
+                    elif classCol[0] == "VELOCITY":
+                        _velo_name= p_class_table[classCol[0]][0]                                                 
+                        self.m_logger.warning("Velo classfit column name {}".format(_velo_name))                            
+                        _newCols.append(fits.Column(array= p_class_table[_velo_name],name= _velo_name,format= classCol[1],unit= classCol[2]) )
                     else:
                         _newCols.append(fits.Column(array= p_class_table[_inferredCol],name= classCol[0],format= classCol[1],unit= classCol[2]) )
 
             except Exception as e:
-                self.m_logger.error("classfits column creation exception: {} - {}".format(classCol, e))                
+                self.m_logger.error("Classfits column creation exception: {} - {}".format(classCol, e))    
+                traceback.print_exc()            
 
         _hdData= self.m_obs_genera_data
         # header 
@@ -981,7 +998,8 @@ class Fitslike_handler():
                 _hdu.header['RESTFREQ'] = _hdData['restfreq']
             else:
                  _hdu.header['RESTFREQ'] = 0.0
-            _hdu.header['VELDEF']= 'RADI_LSR'
+            # TODO Controllare la composizione (ora fissa LSR)
+            #_hdu.header['VELDEF']= self.m_summary['summary']['velo_def'] + '-' +
             _hdu.header['GAINIMAG']= 0.0
             _hdu.header['BEAMEFF']= 0.0
             _hdu.header['FORMEFF']= 0.0

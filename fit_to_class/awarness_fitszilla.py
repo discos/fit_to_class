@@ -175,17 +175,50 @@ class Awarness_fitszilla():
         """
         Keywords from summary.fits
         """        
-        l_keys= [ 'geometry', 'scan_type','restfreq', 'backend_name', 'target_ra', 'target_dec' ]
-        _geometry= wrapkeys.get_value(self.m_intermediate,'geometry') 
-        _scan_type= wrapkeys.get_value(self.m_intermediate,'scan_type') 
+        l_keys= [ 'geometry', 'scan_type','restfreq', 'backend_name', 'target_ra', 'target_dec', 'velo_def', 'velo_frame', 'velo_rad' ]
+        # TODO Aggiustare la lettura delle keyword da file, ora forzate per la mappa
+        _geometry= wrapkeys.get_value(self.m_intermediate,'geometry', False)         
+        _scan_type= wrapkeys.get_value(self.m_intermediate,'scan_type')         
         l_restFreq= wrapkeys.get_value(self.m_intermediate, 'sum_restfreq') * unit.MHz
         l_target_ra= wrapkeys.get_value(self.m_intermediate,'target_ra') * unit.rad
         l_target_dec= wrapkeys.get_value(self.m_intermediate,'target_dec') * unit.rad        
         if self.m_intermediate['sum_backend_name']== 0.0:
             self.m_intermediate['sum_backend_name']= 'UNKNOWN'
             self._errorFromMissingKeyword('scheduled', 'obs_backend_name')
-        l_values= [_geometry, _scan_type, l_restFreq, self.m_intermediate['sum_backend_name'], l_target_ra, l_target_dec]
-        self.m_processedRepr['summary']= dict(zip(l_keys, l_values))
+        _velo_def= wrapkeys.get_value(self.m_intermediate,'velo_def')
+        # TODO completare match velo def
+        _velo_def_match={
+            'RD': 'RADI',
+            'OP': 'OPTI',
+            'Z': 'RELA',
+            'DEFAULT': 'RADI'      
+        }        
+        if _velo_def in _velo_def_match.keys():
+            l_velo_def= _velo_def_match[_velo_def]
+        else:
+            self.m_logger.warning("VELOCITY DEFINITON NOT HANDLED {}".format(_velo_def))
+            l_velo_def= _velo_def_match['DEFAULT']
+        if l_velo_def != 'RADI':
+            self.m_logger.warning("VELOCITY DEFINITON DIFFERENT FROM \'RADIO\' IS PROBABLY NOT SUPPORTED BY GILDAS {}".format(_velo_def))
+        _velo_frame= wrapkeys.get_value(self.m_intermediate,'velo_frame')
+        _velo_frame_match={
+            'LSRD': 'LSR',
+            'LSRK': 'LSR',
+            'BARY': 'HEL',
+            'OBS': 'OBS',
+            'EAR': 'EAR',
+            'TOPOCEN': 'TOP',
+            'DEFAULT': 'LSR'
+        }
+        if _velo_frame in _velo_frame_match.keys():
+            l_velo_frame= _velo_frame_match[_velo_frame]
+        else:
+            self.m_logger.warning("VELOCITY FRAME NOT HANDLED {}".format(_velo_frame))
+            l_velo_frame= _velo_frame_match['DEFAULT']
+        l_velo_rad= wrapkeys.get_value(self.m_intermediate,'velo_rad') * unit.Unit("km/s")
+        # Zip dict
+        l_values= [_geometry, _scan_type, l_restFreq, self.m_intermediate['sum_backend_name'], l_target_ra, l_target_dec, l_velo_def, l_velo_frame, l_velo_rad]                
+        self.m_processedRepr['summary']= dict(zip(l_keys, l_values))        
         #print(self.m_processedRepr['summary'])
 
     def _process_observation(self):
@@ -217,7 +250,7 @@ class Awarness_fitszilla():
             self.m_intermediate['obs_user_lon_offset'] = \
                 wrapkeys.get_value(self.m_intermediate,'obs_user_lon_offset')*unit.rad   
             self.m_intermediate['file_name']= self.m_fileName
-            self.m_intermediate['obs_vlsr'] *=  unit.Unit("km/s")        
+            self.m_intermediate['obs_vlsr'] = wrapkeys.get_value(self.m_intermediate,'obs_vlsr')* unit.Unit("km/s")        
         except Exception as e:
             self.m_logger.error(f"{str(e)}")
             _func_name= sys._getframe().f_code.co_name
