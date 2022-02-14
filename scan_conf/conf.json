@@ -1,0 +1,41 @@
+{
+    "subscan_list":{
+        "enabled": true
+    },
+
+    "pre_parsing":{
+        "enabled": true
+    },
+
+    "geomertry_grouping":{
+        "enabled": true
+    },
+
+    "fitslike_handler":{
+        "enabled": true
+    },
+
+    "subscan_parsing":{
+        "enabled": true
+    },
+
+    "signal_grouping":{
+        "enabled": true
+    },
+
+    "data_calibration_counts":{
+        "enabled": false
+    },
+
+    "data_calibration":{
+        "enabled": false
+    },
+
+    "classfit_conversion_counts":{
+        "enabled": false
+    },
+
+    "classfit_conversion":{
+        "enabled": true
+    }
+}

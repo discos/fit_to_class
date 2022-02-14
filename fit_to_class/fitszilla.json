@@ -1,0 +1,109 @@
+{
+ 	"tables": {
+	    "PRIMARY": 0,
+	    "SECTION TABLE": 1,
+	    "RF INPUTS": 2,
+	    "FEED TABLE": 3,
+	    "DATA TABLE": 4,
+	    "ANTENNA TEMP TABLE": 5,
+	    "SERVO TABLE": 6},
+
+	 "components": {
+    	"summary":{
+        	"parser":{
+				"geometry":["PRIMARY", "HEADER", "GEOMETRY"],
+				"scan_type":["PRIMARY", "HEADER", "scan_type"],
+            	"sum_restfreq":["PRIMARY", "HEADER", "RESTFREQ1"],
+            	"sum_backend_name": ["PRIMARY", "HEADER", "BackendName"],
+            	"target_ra": ["PRIMARY", "HEADER", "RightAscension"],
+            	"target_dec": ["PRIMARY", "HEADER", "Declination"],
+				"velo_def":["PRIMARY", "HEADER", "VDEF"],
+				"velo_frame":["PRIMARY", "HEADER", "VFRAME"],
+				"velo_rad": ["PRIMARY", "HEADER", "VRAD"]
+        	}
+    	},
+		"observation": {		
+			"parser": {
+    			"obs_receiver_code": ["PRIMARY", "HEADER", "Receiver Code"],    			
+				"obs_source": ["PRIMARY", "HEADER", "SOURCE"],
+				"obs_vlsr": ["PRIMARY", "HEADER", "VLSR"],
+				"obs_site": ["PRIMARY", "HEADER", "ANTENNA"],   
+				"obs_date": ["PRIMARY", "HEADER", "DATE"],
+				"obs_ra": ["PRIMARY", "HEADER", "RIGHTASCENSION"],
+				"obs_dec": ["PRIMARY", "HEADER", "DECLINATION"],
+				"obs_ra_offset": ["PRIMARY", "HEADER", "RightAscension Offset"],
+				"obs_dec_offset": ["PRIMARY", "HEADER", "Declination Offset"],
+				"obs_az_offset": ["PRIMARY", "HEADER", "Azimuth Offset"],
+				"obs_el_offset": ["PRIMARY", "HEADER", "Elevation Offset"],
+				"obs_gal_lon_offset": ["PRIMARY", "HEADER", "GalacticLon Offset"],
+				"obs_gal_lat_offset": ["PRIMARY", "HEADER", "GalacticLat Offset"],
+				"obs_user_lat_offset": ["PRIMARY", "HEADER", "UserLatOffset"],
+				"obs_user_lon_offset": ["PRIMARY", "HEADER", "UserLonOffset"],
+				"obs_user_offset_frame": ["PRIMARY", "HEADER", "UserOffsetFrame"],
+				"obs_signal": ["PRIMARY", "HEADER", "SIGNAL"],
+				"obs_scantype": ["PRIMARY", "HEADER", "HIERARCH SubScanType"]
+		    	}		
+		 	},
+		"spectrum": {
+			"parser": {
+				"be_id": ["SECTION TABLE", "DATA", "id"],
+				"be_bins": ["SECTION TABLE", "DATA", "bins"],
+				"be_sample_rate": ["SECTION TABLE", "DATA", "sampleRate"],
+				"be_bandwidth": ["SECTION TABLE", "DATA", "bandWidth"],
+				"be_frequency": ["SECTION TABLE", "DATA", "frequency"],				
+				"be_integration": ["SECTION TABLE", "HEADER", "Integration"],
+				"be_data_type":["SECTION TABLE", "DATA", "type"],
+				"fe_feeds":["RF INPUTS", "DATA", "feed"],
+				"fe_if":["RF INPUTS", "DATA", "ifChain"],
+				"fe_polarizations":["RF INPUTS", "DATA", "polarization"],
+				"fe_be_id":["RF INPUTS", "DATA", "section"],
+				"fe_frequency":["RF INPUTS", "DATA", "frequency"],
+				"fe_bandwidth":["RF INPUTS", "DATA", "bandWidth"],
+				"fe_local_oscillator":["RF INPUTS", "DATA", "localOscillator"],
+				"fe_cal_mark_temp":["RF INPUTS", "DATA", "calibrationMark"],
+				"fe_vlsr":["RF INPUTS", "DATA", "calibrationMark"],						
+				"time":["DATA TABLE", "DATA", "time"],
+				"ch0":["DATA TABLE", "DATA", "ch0"],
+				"ch1":["DATA TABLE", "DATA", "ch1"],
+				"ch2":["DATA TABLE", "DATA", "ch2"],
+				"ch3":["DATA TABLE", "DATA", "ch3"],
+				"ch4":["DATA TABLE", "DATA", "ch4"],
+				"ch5":["DATA TABLE", "DATA", "ch5"],
+				"ch6":["DATA TABLE", "DATA", "ch6"],
+				"ch7":["DATA TABLE", "DATA", "ch7"],
+				"ch8":["DATA TABLE", "DATA", "ch8"],
+				"data_flag_cal":["DATA TABLE", "DATA", "flag_cal"],
+				"ch0_temp":["ANTENNA TEMP TABLE", "DATA", "ch0"],
+				"ch1_temp":["ANTENNA TEMP TABLE", "DATA", "ch1"],
+				"ch2_temp":["ANTENNA TEMP TABLE", "DATA", "ch2"],
+				"ch3_temp":["ANTENNA TEMP TABLE", "DATA", "ch3"],
+				"ch4_temp":["ANTENNA TEMP TABLE", "DATA", "ch4"],
+				"ch5_temp":["ANTENNA TEMP TABLE", "DATA", "ch5"],
+				"ch6_temp":["ANTENNA TEMP TABLE", "DATA", "ch6"],
+				"ch7_temp":["ANTENNA TEMP TABLE", "DATA", "ch7"],
+				"ch8_temp":["ANTENNA TEMP TABLE", "DATA", "ch8"]
+			}
+		},
+		"map": {
+			"parser": {
+				"site": ["PRIMARY", "HEADER", "ANTENNA"],
+				"fe_x_offset":["FEED TABLE", "DATA", "xOffset"],
+				"fe_y_offset":["FEED TABLE", "DATA", "yOffset"],
+				"data_time":["DATA TABLE", "DATA", "time"],
+				"data_ra":["DATA TABLE", "DATA", "raj2000"],
+				"data_dec":["DATA TABLE", "DATA", "decj2000"],
+				"data_az":["DATA TABLE", "DATA", "az"],
+				"data_el":["DATA TABLE", "DATA", "el"],
+				"data_par_angle":["DATA TABLE", "DATA", "par_angle"],
+				"data_derot_angle":["DATA TABLE", "DATA", "derot_angle"]
+			}
+		},
+      "extras":{
+          "parser":{
+              "ex_weather":["DATA TABLE","DATA", "weather"]
+          }
+      }
+	}
+}
+
+

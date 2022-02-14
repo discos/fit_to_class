@@ -1,0 +1,35 @@
+{
+
+	"observation" :  [
+			"source", 
+			"telescope",
+			 "site",
+			 "date"
+			],
+	"spectrum" : [
+			"channel_id",
+			"channel_bins",
+			"sample_rate",
+			"bandwith",
+			"frequency",
+			"integration",
+			"data_type",
+			"feeds",
+			"if",
+			"polarizations",
+			"sections",
+			"frequency",
+			"bandwith",
+			"local_oscillator",
+			"cal_mark_temp",
+			"relative_power",
+			"time",
+			"ch0", "ch1", "ch2", "ch3", "ch4", "ch5","ch6", "ch7","ch8",
+			"ch0_temp", "ch1_temp", "ch2_temp", "ch3_temp", "ch4_temp",
+			"ch5_temp", "ch6_temp", "ch7_temp", "ch8_temp"
+		     ],
+	"map": [
+		"x_offset",
+		"y_offset"
+	]
+}
