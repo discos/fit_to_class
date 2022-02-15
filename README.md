@@ -14,3 +14,11 @@ Usage:
     
   fit_to_class -t [nod,on_off,map] folder
 
+Tested with: Python 3.8.5
+Python deps:
+ 
+ * astropy
+ * numpy
+ * traceback (opt)
+ * memory_profiler (opt)
+      
