@@ -10,8 +10,8 @@ import logging
 import warnings
 from astropy.utils.exceptions import AstropyWarning
 from fit_to_class import fitslike_commons
-import scanoptions
-import scanpipeline
+from fit_to_class import scanoptions
+from fit_to_class import scanpipeline
 
 def run():
     """

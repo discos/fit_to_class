@@ -11,7 +11,7 @@ from fit_to_class import fitslike_handler
 from fit_to_class import fitslike_commons
 from fit_to_class.fitslike_scantype import ScanType
 from fit_to_class.fitslike_scantype import ScanTypes
-import scanoptions
+from fit_to_class import scanoptions
 
 class PipelineTasks(Enum):
     """ Pipeline enum tasks """

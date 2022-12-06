@@ -12,11 +12,11 @@ setuptools.setup(
     long_description= long_desc,
     long_description_content_type= "text/markdown",
     url= "git@github.com:TheDebbio/fit_to_class.git",
-    packages= ['fit_to_class','fit_to_tests'],
-    #package_data='',
+    packages= ['commons','fit_to_class','fit_to_tests'],
+    package_data={"fit_to_class": ["*.json"]},
     entry_points={
         "console_scripts":[
-            "fit_to_class= main:run"
+            "fit_to_class= fit_to_class.main:run"
             ]    
     }
 )
