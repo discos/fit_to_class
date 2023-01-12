@@ -14,7 +14,7 @@ Installation [to be verified]:
       -g geometry NumON,NumOFF,NumCAL, input files has to match the given order
       -fd feed to be parsed (optional, default all, to be verified)
       -r raw processing without grouping input file by geometry (legacy parameter, non really usefull now)
-      -t scan type, e.g. OTF,ON_OFF.. (legacy parmater not usefull now)
+      -t scan type, e.g. OTF,ONOFF.. (legacy parmater not usefull now)
       
       Last argument is the relative folder path with input files
       
@@ -34,7 +34,7 @@ Python deps:
  * astropy
  * numpy
  * traceback (opt)
- * memory_profiler (opt)
+ * memory_profiler 
     
     
  #Pipeline configuration file
