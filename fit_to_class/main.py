@@ -24,7 +24,7 @@ def run():
     l_logger = logging.getLogger(l_commons.logger_name())    
     l_logCh = logging.StreamHandler()            
     l_logCh.setFormatter(LogFormatter())
-    l_logger.setLevel(logging.WARNING)
+    l_logger.setLevel(logging.DEBUG)
     if not len(l_logger.handlers):
         l_logger.addHandler(l_logCh)
 
@@ -46,7 +46,9 @@ def run():
     # Computing oprions
     parser.add_argument("-p", "--parallels", help= "How many input file parsed at a time", type= int, default= 4)
     # Pipeline conf file
-    parser.add_argument("-s", "--scanconf", help="Pipeline json conf file path" , type= str, default= "scan_conf/conf.json")    
+    parser.add_argument("-s", "--scanconf", help="Pipeline json conf file path" , type= str, default= "scan_conf/conf.json")  
+    # log verbose
+    parser.add_argument("-v", "--verbose", help="Log level verbose",action='store_true' )  
     # Parsing
     args= parser.parse_args()
     
@@ -58,6 +60,12 @@ def run():
         scan_options.geometry= args.geometry
         scan_options.parallel= args.parallels
         scan_options.scan_conf_path= args.scanconf
+        if args.verbose:
+            l_logger.setLevel(logging.DEBUG)
+        else:
+            l_logger.setLevel(logging.WARNING)
+
+        
     except ValueError as e:
         l_logger.error("Got wrong input parameter :\n" + str(e))
 

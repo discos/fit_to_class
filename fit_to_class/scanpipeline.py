@@ -19,7 +19,7 @@ class PipelineTasks(Enum):
     PRE_PARSING= "pre_parsing"
     FITSLIKE_HANDLER= "fitslike_handler"
     SUBSCAN_PARSING= "subscan_parsing"
-    GEOMETRY_GROUPING= "geomertry_grouping"
+    GEOMETRY_GROUPING= "geometry_grouping"
     SIGNAL_GROUPING= "signal_grouping"
     DATA_CALIBRATION= "data_calibration"
     DATA_CALIBRATION_COUNTS= "data_calibration_counts"
