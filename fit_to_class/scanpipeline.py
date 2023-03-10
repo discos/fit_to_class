@@ -376,7 +376,7 @@ class ScanPipeline:
         """
         folder= self._scan_options.folder
         files_fits= [os.path.join(folder,f) for f in os.listdir(folder) if f.endswith('.fits')]
-        self._scan_list['summary']= [f for f in files_fits if 'summary' in f]
+        self._scan_list['summary']= [f for f in files_fits if '/sum' in f.lower()]
         # Summary check if exists (it has to be one only)
         if  not self._scan_list['summary']:
             self._logger.error(f"Missing summary.fits from {folder}")

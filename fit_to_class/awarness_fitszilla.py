@@ -160,8 +160,9 @@ class Awarness_fitszilla():
 
         """
         self.m_processedRepr = {}
+        print (self.m_fileName)
         self.m_scheduled= {}
-        if 'summary' in self.m_fileName :
+        if self.m_fileName.lower().startswith('sum') :
             self._process_summary()
         else:
             self._process_observation()
