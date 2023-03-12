@@ -377,6 +377,7 @@ class ScanPipeline:
         folder= self._scan_options.folder
         files_fits= [os.path.join(folder,f) for f in os.listdir(folder) if f.endswith('.fits')]
         self._scan_list['summary']= [f for f in files_fits if '/sum' in f.lower()]
+        #print (self._scan_list['summary'])
         # Summary check if exists (it has to be one only)
         if  not self._scan_list['summary']:
             self._logger.error(f"Missing summary.fits from {folder}")
@@ -384,10 +385,16 @@ class ScanPipeline:
             return
         # Summary, from list to single file
         self._scan_list['summary']= self._scan_list['summary'][0]
+        print(self._scan_list['summary'][0])  
+ #       self._scan_list['summary']= list(self._scan_list['summary'])
+        
+        
+        self._logger.debug(f"Summary File {str()}")
+
         # Subscans
-        self._scan_list['subscan']= [f for f in files_fits if 'summary' not in f]
+        self._scan_list['subscan']= [f for f in files_fits if '/sum' not in f.lower()]
         # Print
-        #self._subscan_list_print()
+        # self._subscan_list_print()
             
     def _pipeline_pre_parsing(self, p_scan_context) -> None:
         """

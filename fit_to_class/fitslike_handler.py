@@ -185,8 +185,10 @@ class Fitslike_handler():
         """                
         # TODO VERIFCARE CHE SIA CORRETTO
         # Input files
+        #self.m_logger.debug('scanlist',p_subscan_list)
         _summary= p_subscan_list['summary']        
-        _subscans= p_subscan_list['subscan']        
+        _subscans= p_subscan_list['subscan'] 
+        self.m_logger.debug("Scabnlist type:"+str(type(p_subscan_list)))       
         # Split parsing multiprocessing
         self.m_results=[]
         _poolSize= self.m_files_per_pool

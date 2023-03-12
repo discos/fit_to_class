@@ -20,8 +20,9 @@ def get_value(p_dict, p_key, p_raise= True):
         else:
             return "KEY_UNAVAILABLE"
     # Raise with None value
-    if p_dict[p_key]== None:
-        raise Exception(f"Key with unacceptable None value: {p_key}")
+    if p_raise and p_dict[p_key]== None:
+          pass
+      #     raise Exception(f"Key with unacceptable None value: {p_key}")
     return p_dict[p_key]
 
-    
+       

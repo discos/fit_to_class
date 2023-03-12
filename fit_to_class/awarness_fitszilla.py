@@ -220,7 +220,6 @@ class Awarness_fitszilla():
         # Zip dict
         l_values= [_geometry, _scan_type, l_restFreq, self.m_intermediate['sum_backend_name'], l_target_ra, l_target_dec, l_velo_def, l_velo_frame, l_velo_rad]                
         self.m_processedRepr['summary']= dict(zip(l_keys, l_values))        
-        #print(self.m_processedRepr['summary'])
 
     def _process_observation(self):
         """
