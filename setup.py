@@ -5,7 +5,7 @@ with open("README.md","r") as fh:
     
 setuptools.setup(
     name= "fit_to_class",
-    version= "0.1",
+    version= "0.1.1",
     author= "mdebiaggi",
     author_email= "debiaggi@ianf.it",
     description= "Simple fitszille to classfits converter",
