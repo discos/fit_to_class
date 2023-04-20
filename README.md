@@ -86,6 +86,13 @@ on the other hand when we need the usual calibrated data:
         "enabled": true
     }
 
+## Documentation
+
+Install [Sphinx](https://www.sphinx-doc.org/en/master/usage/installation.html).
+Once Sphinx is installed, run  `make html` from the fit2class `docs` directory.
+The documentation will be written in `docs/build/html`.
+
+
 ## release notes
 
 * 0.1 first commit
